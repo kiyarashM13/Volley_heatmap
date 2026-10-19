@@ -2,6 +2,7 @@ export type Phase = "reception" | "transition" | "other"
 export type Hit = "hard" | "tip" | "soft" | "other"
 export type PlotMode = "heatmap" | "lines" | "both"
 export type GroupMode = "code" | "rotation" | "court"
+export type Skill = "attack" | "serve"
 
 export type Attack = {
   team: string
@@ -35,6 +36,7 @@ export type ScoutMatch = {
   visitingSets: number | null
   unplotted: number
   attacks: Attack[]
+  serves: Attack[]
 }
 
 export type Filters = {

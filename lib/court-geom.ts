@@ -1,4 +1,4 @@
-import type { Attack, GroupMode } from "./types"
+import type { Attack, GroupMode, Skill } from "./types"
 
 /**
  * Openvolley court: x in [0, 4], y in [0, 7].
@@ -35,16 +35,18 @@ export function columnCount(_width: number, group: GroupMode): number {
   return 3
 }
 
-export function attackSummary(attacks: Attack[]): string {
+export function attackSummary(attacks: Attack[], skill: Skill = "attack"): string {
   const attempts = attacks.length
   const kills = attacks.filter((attack) => attack.evaluation === "#").length
   const errors = attacks.filter((attack) => attack.evaluation === "=").length
   const blocks = attacks.filter((attack) => attack.evaluation === "/").length
-  const efficiency = attempts === 0 ? 0 : (kills - errors - blocks) / attempts
+  const efficiency =
+    attempts === 0 ? 0 : skill === "serve" ? (kills - errors) / attempts : (kills - errors - blocks) / attempts
   const success = attempts === 0 ? 0 : kills / attempts
   const count = attempts.toLocaleString("fa-IR")
   const percent = (ratio: number) => `${Math.round(ratio * 100).toLocaleString("fa-IR")}٪`
-  return `${count} حمله | ${percent(efficiency)} کارایی | ${percent(success)} موفقیت`
+  const noun = skill === "serve" ? "سرویس" : "حمله"
+  return `${count} ${noun} | ${percent(efficiency)} کارایی | ${percent(success)} موفقیت`
 }
 
 export function attackCode(attack: Attack): string {
@@ -77,6 +79,7 @@ export function buildLayout(
   group: GroupMode,
   columns: number,
   title: string,
+  skill: Skill = "attack",
 ): ChartLayout {
   const source = panelsFor(attacks, group)
   const panels = source.length > 0 ? source : [{ label: null, attacks: [] }]
@@ -108,7 +111,7 @@ export function buildLayout(
       return {
         label: panel.label,
         attacks: panel.attacks,
-        summary: attackSummary(panel.attacks),
+        summary: attackSummary(panel.attacks, skill),
         ox: originX0 + col * (cellW + gapX),
         oy: titleH + row * (cellH + gapY) + labelH,
       }

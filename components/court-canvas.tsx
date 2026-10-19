@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react"
 
 import { buildLayout, chartCssSize, columnCount, drawAttacks } from "@/lib/draw-court"
-import type { Attack, GroupMode, PlotMode } from "@/lib/types"
+import type { Attack, GroupMode, PlotMode, Skill } from "@/lib/types"
 
 type Props = {
   attacks: Attack[]
@@ -11,10 +11,11 @@ type Props = {
   group: GroupMode
   themeId: string
   title: string
+  skill: Skill
 }
 
 export const CourtCanvas = forwardRef<HTMLCanvasElement, Props>(function CourtCanvas(
-  { attacks, mode, group, themeId, title },
+  { attacks, mode, group, themeId, title, skill },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -27,7 +28,7 @@ export const CourtCanvas = forwardRef<HTMLCanvasElement, Props>(function CourtCa
 
     const paint = () => {
       const columns = columnCount(parent.clientWidth, group)
-      const layout = buildLayout(attacks, group, columns, title)
+      const layout = buildLayout(attacks, group, columns, title, skill)
       const { cssWidth, cssHeight } = chartCssSize(parent.clientWidth, layout, group)
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
       canvas.style.width = `${cssWidth}px`
@@ -51,7 +52,7 @@ export const CourtCanvas = forwardRef<HTMLCanvasElement, Props>(function CourtCa
       if (!ctx) return
       ctx.setTransform((cssWidth / layout.w) * dpr, 0, 0, (cssHeight / layout.h) * dpr, 0, 0)
       const family = getComputedStyle(document.body).fontFamily || "sans-serif"
-      drawAttacks(ctx, attacks, mode, group, themeId, title, columns, family)
+      drawAttacks(ctx, attacks, mode, group, themeId, title, columns, family, skill)
     }
 
     paint()
@@ -62,7 +63,7 @@ export const CourtCanvas = forwardRef<HTMLCanvasElement, Props>(function CourtCa
       observer.disconnect()
       window.removeEventListener("resize", paint)
     }
-  }, [attacks, mode, group, themeId, title])
+  }, [attacks, mode, group, themeId, title, skill])
 
   return <canvas ref={canvasRef} className="mx-auto block max-w-full rounded-2xl" />
 })

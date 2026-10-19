@@ -9,8 +9,8 @@ const vazir = Vazirmatn({
 })
 
 export const metadata: Metadata = {
-  title: "جهت حمله",
-  description: "نقشه حرارتی و مسیر حمله والیبال از فایل اسکاوت DataVolley",
+  title: "جهت حمله و سرویس",
+  description: "نقشه حرارتی و مسیر حمله و سرویس والیبال از فایل اسکاوت DataVolley",
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

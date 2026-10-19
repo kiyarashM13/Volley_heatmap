@@ -43,6 +43,13 @@ SUBZONE = {
 
 SKILL_RE = re.compile(r"^[*a](\d+)([SREABDF])")
 HIT_CODES = {"H": "hard", "T": "tip", "P": "soft"}
+# DataVolley serve-type letter, the character immediately after S.
+SERVE_TYPES = {
+    "Q": "Q · پرشی فلوت",
+    "M": "M · پرشی اسپک",
+    "T": "T · فلوت",
+    "H": "H · هیبرید",
+}
 
 
 def _missing(value) -> bool:
@@ -127,6 +134,16 @@ def _phase(value) -> str:
     return "other"
 
 
+def _serve_label(code: str) -> str:
+    match = SKILL_RE.match(code or "")
+    if not match or match.group(2) != "S":
+        return "سایر"
+    index = match.end(2)
+    if index >= len(code):
+        return "سایر"
+    return SERVE_TYPES.get(code[index], "سایر")
+
+
 def _rotation(row) -> int | None:
     team = "" if _missing(row.get("team")) else str(row.get("team"))
     home = "" if _missing(row.get("home_team")) else str(row.get("home_team"))
@@ -137,14 +154,12 @@ def _rotation(row) -> int | None:
     return number
 
 
-def export_match(path: Path, file_name: str | None = None) -> dict:
-    match = read_dv.DataVolley(str(path))
-    plays = match.get_plays()
-    attacks = plays[plays["skill"] == "Attack"] if "skill" in plays.columns else plays.iloc[0:0]
-
+def _export_rows(frame, kind: str) -> tuple[list, int]:
     exported = []
     unplotted = 0
-    for _, row in attacks.iterrows():
+    if frame is None or len(frame) == 0:
+        return exported, unplotted
+    for _, row in frame.iterrows():
         code = "" if _missing(row.get("code")) else str(row.get("code"))
         sub = None if _missing(row.get("end_subzone")) else str(row.get("end_subzone")).strip()[:1]
         start = (_num(row.get("start_coordinate_x")), _num(row.get("start_coordinate_y")))
@@ -163,7 +178,12 @@ def export_match(path: Path, file_name: str | None = None) -> dict:
             mid = (None, None)
 
         if start[0] is None or start[1] is None:
-            placed = _place(_zone(row.get("start_zone")), None, upper=False)
+            if kind == "serve":
+                zone = _zone(row.get("start_zone"))
+                # The server stands behind the baseline, not in the middle of the zone.
+                placed = None if zone is None else (LOWER_ZONES[zone][0], 0.39)
+            else:
+                placed = _place(_zone(row.get("start_zone")), None, upper=False)
             if placed is None:
                 unplotted += 1
                 continue
@@ -186,12 +206,29 @@ def export_match(path: Path, file_name: str | None = None) -> dict:
             ex, ey = _flip(ex, ey)
             if mx is not None and my is not None:
                 mx, my = _flip(mx, my)
+        # A duplicated end (start copied into the landing) stays on the server's
+        # feet after the flip. Keep the origin and estimate the far-court zone.
+        if abs(ex - sx) < 0.02 and abs(ey - sy) < 0.02 and ey <= 3.5:
+            placed = _place(_zone(row.get("end_zone")), sub, upper=True)
+            if placed is not None and placed[1] > 3.5:
+                ex, ey = placed
+                end_measured = False
+                located = "zone"
+                mx, my = None, None
 
         player_number = "" if _missing(row.get("player_number")) else str(row.get("player_number")).strip()
         if player_number.endswith(".0"):
             player_number = player_number[:-2]
         player_name = "" if _missing(row.get("player_name")) else str(row.get("player_name")).strip()
         evaluation = "" if _missing(row.get("evaluation_code")) else str(row.get("evaluation_code")).strip()
+        if kind == "serve":
+            phase = "other"
+            hit = "other"
+            attack_code = _serve_label(code)
+        else:
+            phase = _phase(row.get("attack_phase"))
+            hit = _hit(code)
+            attack_code = None if _missing(row.get("attack_code")) else str(row.get("attack_code")).strip()
 
         exported.append(
             {
@@ -199,11 +236,11 @@ def export_match(path: Path, file_name: str | None = None) -> dict:
                 "playerNumber": player_number,
                 "playerName": player_name,
                 "evaluation": evaluation,
-                "phase": _phase(row.get("attack_phase")),
-                "hit": _hit(code),
+                "phase": phase,
+                "hit": hit,
                 "rotation": _rotation(row),
                 "setNumber": _int(row.get("set_number")),
-                "attackCode": None if _missing(row.get("attack_code")) else str(row.get("attack_code")).strip(),
+                "attackCode": attack_code,
                 "startZone": _zone(row.get("start_zone")),
                 "endZone": _zone(row.get("end_zone")),
                 "located": located,
@@ -217,6 +254,16 @@ def export_match(path: Path, file_name: str | None = None) -> dict:
                 "my": None if my is None else round(my, 4),
             }
         )
+    return exported, unplotted
+
+
+def export_match(path: Path, file_name: str | None = None) -> dict:
+    match = read_dv.DataVolley(str(path))
+    plays = match.get_plays()
+    attacks = plays[plays["skill"] == "Attack"] if "skill" in plays.columns else plays.iloc[0:0]
+    serves = plays[plays["skill"] == "Serve"] if "skill" in plays.columns else plays.iloc[0:0]
+    exported, unplotted = _export_rows(attacks, "attack")
+    serve_rows, serve_unplotted = _export_rows(serves, "serve")
 
     def sets_won(value):
         try:
@@ -232,8 +279,9 @@ def export_match(path: Path, file_name: str | None = None) -> dict:
         "visitingTeam": match.visiting_team,
         "homeSets": sets_won(match.home_setswon),
         "visitingSets": sets_won(match.visiting_setswon),
-        "unplotted": unplotted,
+        "unplotted": unplotted + serve_unplotted,
         "attacks": exported,
+        "serves": serve_rows,
     }
 
 

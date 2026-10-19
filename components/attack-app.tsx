@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { COURT_THEMES, DEFAULT_COURT, courtById } from "@/lib/courts"
 import { bytesToBlob, canvasToJpeg, downloadBlob, jpegBytesToPdf } from "@/lib/pdf"
-import type { Attack, Filters, GroupMode, Hit, Phase, PlotMode, ScoutMatch } from "@/lib/types"
+import type { Attack, Filters, GroupMode, Hit, Phase, PlotMode, ScoutMatch, Skill } from "@/lib/types"
 
 const PHASES: { id: Phase; label: string }[] = [
   { id: "reception", label: "بعد از دریافت" },
@@ -30,11 +30,18 @@ const PLOTS: { id: PlotMode; label: string }[] = [
   { id: "lines", label: "جهت" },
 ]
 
-const GROUPS: { id: GroupMode; label: string }[] = [
-  { id: "code", label: "ترکیب حمله" },
-  { id: "rotation", label: "چرخش" },
-  { id: "court", label: "یک زمین" },
-]
+const GROUPS: Record<Skill, { id: GroupMode; label: string }[]> = {
+  attack: [
+    { id: "code", label: "ترکیب حمله" },
+    { id: "rotation", label: "چرخش" },
+    { id: "court", label: "یک زمین" },
+  ],
+  serve: [
+    { id: "code", label: "نوع سرویس" },
+    { id: "rotation", label: "چرخش" },
+    { id: "court", label: "یک زمین" },
+  ],
+}
 
 function fa(value: number, digits = 0) {
   return value.toLocaleString("fa-IR", {
@@ -50,6 +57,10 @@ function playerKey(attack: Attack) {
 function playerLabel(number: string, name: string) {
   if (name && number) return `${number} ${name}`
   return name || number || "بدون نام"
+}
+
+function eventsOf(match: ScoutMatch, skill: Skill) {
+  return skill === "serve" ? match.serves : match.attacks
 }
 
 export function AttackApp() {
@@ -68,11 +79,12 @@ export function AttackApp() {
     mode: "both",
   })
   const [themeId, setThemeId] = useState(DEFAULT_COURT)
+  const [skill, setSkill] = useState<Skill>("attack")
 
   const teams = useMemo(() => {
     const counts = new Map<string, number>()
     for (const match of matches) {
-      for (const attack of match.attacks) {
+      for (const attack of eventsOf(match, skill)) {
         if (!attack.team) continue
         counts.set(attack.team, (counts.get(attack.team) ?? 0) + 1)
       }
@@ -83,14 +95,14 @@ export function AttackApp() {
       if (b[0] === home) return 1
       return a[0].localeCompare(b[0])
     })
-  }, [matches])
+  }, [matches, skill])
 
   const team = teams.some(([name]) => name === teamChoice) ? teamChoice : (teams[0]?.[0] ?? "")
 
   const players = useMemo(() => {
     const map = new Map<string, { key: string; number: string; name: string; count: number }>()
     for (const match of matches) {
-      for (const attack of match.attacks) {
+      for (const attack of eventsOf(match, skill)) {
         if (attack.team !== team) continue
         const key = playerKey(attack)
         const existing = map.get(key)
@@ -99,34 +111,36 @@ export function AttackApp() {
       }
     }
     return [...map.values()].sort((a, b) => Number(a.number) - Number(b.number) || a.name.localeCompare(b.name))
-  }, [matches, team])
+  }, [matches, team, skill])
 
   const player = players.some((item) => item.key === filters.player) ? filters.player : "all"
   const selectedPlayer = players.find((item) => item.key === player)
   const chartTitle = selectedPlayer
     ? `#${selectedPlayer.number} - ${selectedPlayer.name || selectedPlayer.number}`
-    : team || "جهت حمله"
+    : team || (skill === "serve" ? "سرویس" : "جهت حمله")
 
   const visible = useMemo(() => {
     return matches.flatMap((match) =>
-      match.attacks.filter(
+      eventsOf(match, skill).filter(
         (attack) =>
           attack.team === team &&
-          filters.phases[attack.phase] &&
-          filters.hits[attack.hit] &&
+          (skill === "serve" || filters.phases[attack.phase]) &&
+          (skill === "serve" || filters.hits[attack.hit]) &&
           (player === "all" || playerKey(attack) === player),
       ),
     )
-  }, [matches, team, filters, player])
+  }, [matches, team, filters, player, skill])
 
   const stats = useMemo(() => {
     const kills = visible.filter((attack) => attack.evaluation === "#").length
     const errors = visible.filter((attack) => attack.evaluation === "=").length
     const blocks = visible.filter((attack) => attack.evaluation === "/").length
     const attempts = visible.length
-    const efficiency = attempts === 0 ? 0 : (kills - errors - blocks) / attempts
-    return { attempts, kills, errors, blocks, efficiency }
-  }, [visible])
+    const efficiency =
+      attempts === 0 ? 0 : skill === "serve" ? (kills - errors) / attempts : (kills - errors - blocks) / attempts
+    const success = attempts === 0 ? 0 : kills / attempts
+    return { attempts, kills, errors, blocks, efficiency, success }
+  }, [visible, skill])
 
   const scoreLine = useMemo(() => {
     const home = matches.find((match) => match.homeTeam === team || match.visitingTeam === team)
@@ -208,10 +222,20 @@ export function AttackApp() {
           <p className="text-xs tracking-wide text-primary">اسکاوت والیبال</p>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">جهت حمله</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {skill === "serve" ? "جهت سرویس" : "جهت حمله"}
+              </h1>
               <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-                نقطهٔ فرود و مسیر هر ضربه از مختصات فایل خوانده می‌شود. اوج قرمز روی همان نقطه است و خط از محل ضربه تا فرود می‌رود.
+                نقطهٔ فرود و مسیر هر ضربه، و جای سرویس تا فرود آن، از مختصات فایل خوانده می‌شود.
               </p>
+              <div className="mt-3 flex gap-2">
+                <Button type="button" size="sm" variant={skill === "attack" ? "default" : "outline"} onClick={() => setSkill("attack")}>
+                  حمله
+                </Button>
+                <Button type="button" size="sm" variant={skill === "serve" ? "default" : "outline"} onClick={() => setSkill("serve")}>
+                  سرویس
+                </Button>
+              </div>
             </div>
             {scoreLine ? (
               <p className="text-sm text-muted-foreground">
@@ -344,6 +368,8 @@ export function AttackApp() {
             </Select>
           </section>
 
+          {skill === "attack" ? (
+          <>
           <section>
             <p className="text-sm font-medium">فاز حمله</p>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -389,6 +415,12 @@ export function AttackApp() {
               ))}
             </div>
           </section>
+          </>
+          ) : (
+            <p className="text-xs leading-5 text-muted-foreground">
+              نقطهٔ پشت خط، جایی است که سرویس زده شده. رنگ روی محل فرود توپ در زمین حریف است.
+            </p>
+          )}
 
           <section>
             <p className="text-sm font-medium">مدل زمین</p>
@@ -437,7 +469,7 @@ export function AttackApp() {
             </div>
             <p className="mt-3 text-sm font-medium">چیدمان</p>
             <div className="mt-2 flex flex-wrap gap-2">
-              {GROUPS.map((item) => (
+              {GROUPS[skill].map((item) => (
                 <Button
                   key={item.id}
                   type="button"
@@ -468,14 +500,18 @@ export function AttackApp() {
 
         <main className="flex min-w-0 flex-col gap-4">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-            <Stat label="حمله" value={fa(stats.attempts)} />
-            <Stat label="امتیاز" value={fa(stats.kills)} />
+            <Stat label={skill === "serve" ? "سرویس" : "حمله"} value={fa(stats.attempts)} />
+            <Stat label={skill === "serve" ? "ایس" : "امتیاز"} value={fa(stats.kills)} />
             <Stat label="خطا" value={fa(stats.errors)} />
-            <Stat label="بلاک" value={fa(stats.blocks)} />
+            {skill === "serve" ? (
+              <Stat label="موفقیت" value={fa(stats.success, 3)} hint="ایس / سرویس" />
+            ) : (
+              <Stat label="بلاک" value={fa(stats.blocks)} />
+            )}
             <Stat
               label="کارایی"
               value={fa(stats.efficiency, 3)}
-              hint="(امتیاز − خطا − بلاک) / حمله"
+              hint={skill === "serve" ? "(ایس − خطا) / سرویس" : "(امتیاز − خطا − بلاک) / حمله"}
               className="col-span-2 sm:col-span-1"
             />
           </div>
@@ -483,21 +519,31 @@ export function AttackApp() {
           <section className="rounded-2xl border border-border bg-card p-3 sm:p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="text-base font-medium">جهت‌های حمله</h2>
+                <h2 className="text-base font-medium">{skill === "serve" ? "جهت سرویس" : "جهت‌های حمله"}</h2>
                 <p className="text-xs text-muted-foreground">
                   {theme.name}
                   {team ? ` · ${team}` : ""}
-                  {filters.group === "code" ? " · هر خانه یک ترکیب" : filters.group === "rotation" ? " · شش چرخش" : " · همه روی یک زمین"}
+                  {filters.group === "code"
+                    ? skill === "serve"
+                      ? " · هر خانه یک نوع سرویس"
+                      : " · هر خانه یک ترکیب"
+                    : filters.group === "rotation"
+                      ? " · شش چرخش"
+                      : " · همه روی یک زمین"}
                 </p>
               </div>
-              <Badge variant="outline">{fa(visible.length)} ضربه روی نمودار</Badge>
+              <Badge variant="outline">{fa(visible.length)} {skill === "serve" ? "سرویس روی نمودار" : "ضربه روی نمودار"}</Badge>
             </div>
             {matches.length === 0 ? (
               <p className="mb-3 text-sm text-muted-foreground">
                 هنوز فایلی باز نشده. مدل زمین را همین حالا عوض کنید، یا بازی اوکراین – رومانی را بارگذاری کنید.
               </p>
             ) : visible.length === 0 ? (
-              <p className="mb-3 text-sm text-muted-foreground">با این فیلتر حمله‌ای نمانده. یکی از فازها یا نوع ضربه‌ها را روشن کنید.</p>
+              <p className="mb-3 text-sm text-muted-foreground">
+                {skill === "serve"
+                  ? "برای این تیم سرویسِ قابل‌رسمی نمانده."
+                  : "با این فیلتر حمله‌ای نمانده. یکی از فازها یا نوع ضربه‌ها را روشن کنید."}
+              </p>
             ) : null}
             <CourtCanvas
               ref={canvasRef}
@@ -506,26 +552,31 @@ export function AttackApp() {
               group={filters.group}
               themeId={themeId}
               title={chartTitle}
+              skill={skill}
             />
             <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               {filters.mode === "heatmap" ? (
                 <span className="inline-flex items-center gap-1.5">
                   <span className="size-2.5 rounded-full bg-[#e10600]" />
-                  محل ضربه
+                  {skill === "serve" ? "جای سرویس" : "محل ضربه"}
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5">
                   <span className="size-2.5 rounded-full bg-neutral-800" />
-                  ضربه و فرود
+                  {skill === "serve" ? "شروع و فرود" : "ضربه و فرود"}
                 </span>
               )}
               {filters.mode !== "heatmap" ? (
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-0.5 w-6 bg-neutral-500" />
-                  مسیر ضربه
+                  {skill === "serve" ? "مسیر سرویس" : "مسیر ضربه"}
                 </span>
               ) : null}
-              <span>کارایی = (امتیاز − خطا − بلاک) / حمله، موفقیت = امتیاز / حمله</span>
+              <span>
+                {skill === "serve"
+                  ? "کارایی = (ایس − خطا) / سرویس، موفقیت = ایس / سرویس"
+                  : "کارایی = (امتیاز − خطا − بلاک) / حمله، موفقیت = امتیاز / حمله"}
+              </span>
               {filters.mode !== "lines" ? (
                 <span className="inline-flex items-center gap-2">
                   <span
@@ -538,7 +589,9 @@ export function AttackApp() {
             </div>
             {zoneFallback ? (
               <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                ضربهٔ نقطه‌چین مختصات فرود نداشت و وسط همان منطقه گذاشته شده. داخل نقشهٔ حرارتی نیست تا جای توپ جابه‌جا دیده نشود.
+                {skill === "serve"
+                  ? "سرویس نقطه‌چین مختصات فرود نداشت و وسط همان منطقه، آن‌طرف تور، گذاشته شده. داخل نقشهٔ حرارتی نیست."
+                  : "ضربهٔ نقطه‌چین مختصات فرود نداشت و وسط همان منطقه گذاشته شده. داخل نقشهٔ حرارتی نیست تا جای توپ جابه‌جا دیده نشود."}
               </p>
             ) : null}
           </section>

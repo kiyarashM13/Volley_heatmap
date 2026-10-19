@@ -9,7 +9,7 @@ import {
   splatDensity,
   type ChartLayout,
 } from "@/lib/court-geom"
-import type { Attack, GroupMode, PlotMode } from "@/lib/types"
+import type { Attack, GroupMode, PlotMode, Skill } from "@/lib/types"
 
 export { buildLayout, columnCount } from "@/lib/court-geom"
 export type { ChartLayout } from "@/lib/court-geom"
@@ -277,9 +277,10 @@ export function drawAttacks(
   title: string,
   columns: number,
   fontFamily: string,
+  skill: Skill = "attack",
 ) {
   const theme = courtById(themeId)
-  const layout = buildLayout(attacks, group, columns, title)
+  const layout = buildLayout(attacks, group, columns, title, skill)
   const ink = courtInk(theme)
   paintFrame(ctx, theme, layout.w, layout.h)
 
