@@ -5,7 +5,7 @@ import { useMemo, useRef, useState } from "react"
 
 import { CourtCanvas } from "@/components/court-canvas"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { COURT_THEMES, DEFAULT_COURT, courtById } from "@/lib/courts"
@@ -348,13 +348,16 @@ export function AttackApp() {
               <p className="mt-1 max-w-xl text-sm text-muted-foreground">
                 نقطهٔ فرود و مسیر هر ضربه، و جای سرویس تا فرود آن، از مختصات فایل خوانده می‌شود.
               </p>
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant={skill === "attack" ? "default" : "outline"} onClick={() => setSkill("attack")}>
                   حمله
                 </Button>
                 <Button type="button" size="sm" variant={skill === "serve" ? "default" : "outline"} onClick={() => setSkill("serve")}>
                   سرویس
                 </Button>
+                <a href="/api/project-zip" download="attack-heatmap.zip" className={buttonVariants({ size: "sm", variant: "outline" })}>
+                  دانلود زیپ
+                </a>
               </div>
             </div>
             {scoreLine ? (
