@@ -26,11 +26,13 @@ const HITS: { id: Hit; label: string }[] = [
 ]
 
 const ZONE_ORDER = ["4", "3", "2", "1", "6", "5", "7", "8", "9"]
+const SERVE_ZONE_ORDER = ["1", "6", "5", "7", "8", "9", "4", "3", "2"]
+const ROTATION_ORDER = [1, 6, 5, 4, 3, 2]
 
 const PLOTS: { id: PlotMode; label: string; hint: string }[] = [
-  { id: "heatmap", label: "هیت مپ", hint: "فقط محل فرود، بدون خط جهت." },
-  { id: "lines", label: "جهت", hint: "فقط مسیر، از نقطهٔ شروع تا فرود." },
-  { id: "both", label: "هیت مپ + جهت", hint: "محل فرود و مسیر با هم." },
+  { id: "heatmap", label: "هیت مپ", hint: "فقط محل فرود. نقطهٔ سبز یعنی امتیاز." },
+  { id: "lines", label: "جهت", hint: "فقط مسیر. خط سبز یعنی امتیاز." },
+  { id: "both", label: "هیت مپ + جهت", hint: "محل فرود و مسیر با هم. خط سبز یعنی امتیاز." },
 ]
 
 const GROUPS: Record<Skill, { id: GroupMode; label: string }[]> = {
@@ -66,6 +68,11 @@ function eventsOf(match: ScoutMatch, skill: Skill) {
   return skill === "serve" ? match.serves : match.attacks
 }
 
+function numberMatches(value: number | null, selected: number[]) {
+  if (selected.length === 0) return true
+  return value != null && selected.includes(value)
+}
+
 function zoneMatches(attack: Attack, zones: string[]) {
   if (zones.length === 0) return true
   return zones.includes(attack.startZone ?? "")
@@ -77,13 +84,22 @@ function codeMatches(attack: Attack, query: string) {
   return (attack.attackCode?.trim() || "NA").toUpperCase().includes(needle)
 }
 
-function attackNote(zones: string[], query: string) {
+function chartNote(skill: Skill, filters: Filters) {
   const parts: string[] = []
+  if (filters.sets.length > 0) {
+    parts.push(`ست ${filters.sets.map((set) => set.toLocaleString("fa-IR")).join("، ")}`)
+  }
+  if (filters.rotations.length > 0) {
+    parts.push(`چرخش ${filters.rotations.map((rotation) => rotation.toLocaleString("fa-IR")).join("، ")}`)
+  }
+  const zones = skill === "serve" ? filters.serveZones : filters.startZones
   if (zones.length > 0) {
     parts.push(`منطقه ${zones.map((zone) => Number(zone).toLocaleString("fa-IR")).join("، ")}`)
   }
-  const code = query.trim().toUpperCase()
-  if (code) parts.push(code)
+  if (skill === "attack") {
+    const code = filters.codeQuery.trim().toUpperCase()
+    if (code) parts.push(code)
+  }
   return parts.join(" · ")
 }
 
@@ -99,7 +115,10 @@ export function AttackApp() {
     phases: { reception: true, transition: true, other: true },
     hits: { hard: true, tip: true, soft: true, other: true },
     player: "all",
+    sets: [],
+    rotations: [],
     startZones: [],
+    serveZones: [],
     codeQuery: "",
     group: "code",
     mode: "both",
@@ -130,7 +149,10 @@ export function AttackApp() {
     for (const match of matches) {
       for (const attack of eventsOf(match, skill)) {
         if (attack.team !== team) continue
+        if (!numberMatches(attack.setNumber, filters.sets)) continue
+        if (!numberMatches(attack.rotation, filters.rotations)) continue
         if (skill === "attack" && !zoneMatches(attack, filters.startZones)) continue
+        if (skill === "serve" && !zoneMatches(attack, filters.serveZones)) continue
         if (skill === "attack" && !codeMatches(attack, filters.codeQuery)) continue
         const key = playerKey(attack)
         const existing = map.get(key)
@@ -139,7 +161,7 @@ export function AttackApp() {
       }
     }
     return [...map.values()].sort((a, b) => Number(a.number) - Number(b.number) || a.name.localeCompare(b.name))
-  }, [matches, team, skill, filters.startZones, filters.codeQuery])
+  }, [matches, team, skill, filters.sets, filters.rotations, filters.startZones, filters.serveZones, filters.codeQuery])
 
   const player = players.some((item) => item.key === filters.player) ? filters.player : "all"
   const selectedPlayer = players.find((item) => item.key === player)
@@ -159,21 +181,49 @@ export function AttackApp() {
     )
   }, [matches, team, filters.phases, filters.hits, player, skill])
 
+  const setChoices = useMemo(() => {
+    const counts = new Map<number, number>()
+    for (const attack of scoped) {
+      if (attack.setNumber == null) continue
+      counts.set(attack.setNumber, (counts.get(attack.setNumber) ?? 0) + 1)
+    }
+    return [...counts.entries()].sort((a, b) => a[0] - b[0]).map(([set, count]) => ({ set, count }))
+  }, [scoped])
+
+  const rotationChoices = useMemo(() => {
+    const counts = new Map<number, number>()
+    for (const attack of scoped) {
+      if (!numberMatches(attack.setNumber, filters.sets)) continue
+      if (attack.rotation == null) continue
+      counts.set(attack.rotation, (counts.get(attack.rotation) ?? 0) + 1)
+    }
+    return ROTATION_ORDER.filter((rotation) => counts.has(rotation) || filters.rotations.includes(rotation)).map(
+      (rotation) => ({ rotation, count: counts.get(rotation) ?? 0 }),
+    )
+  }, [scoped, filters.sets, filters.rotations])
+
+  const activeZones = skill === "serve" ? filters.serveZones : filters.startZones
+
   const zoneChoices = useMemo(() => {
+    const order = skill === "serve" ? SERVE_ZONE_ORDER : ZONE_ORDER
     const counts = new Map<string, number>()
     for (const attack of scoped) {
+      if (!numberMatches(attack.setNumber, filters.sets)) continue
+      if (!numberMatches(attack.rotation, filters.rotations)) continue
       if (!attack.startZone) continue
       counts.set(attack.startZone, (counts.get(attack.startZone) ?? 0) + 1)
     }
-    return ZONE_ORDER.filter((zone) => counts.has(zone) || filters.startZones.includes(zone)).map((zone) => ({
+    return order.filter((zone) => counts.has(zone) || activeZones.includes(zone)).map((zone) => ({
       zone,
       count: counts.get(zone) ?? 0,
     }))
-  }, [scoped, filters.startZones])
+  }, [scoped, skill, filters.sets, filters.rotations, activeZones])
 
   const codeChoices = useMemo(() => {
     const counts = new Map<string, number>()
     for (const attack of scoped) {
+      if (!numberMatches(attack.setNumber, filters.sets)) continue
+      if (!numberMatches(attack.rotation, filters.rotations)) continue
       if (!zoneMatches(attack, filters.startZones)) continue
       const code = attack.attackCode?.trim() || "NA"
       counts.set(code, (counts.get(code) ?? 0) + 1)
@@ -183,17 +233,19 @@ export function AttackApp() {
       .filter(([code]) => !query || code.toUpperCase().includes(query))
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "en", { numeric: true }))
       .map(([code, count]) => ({ code, count }))
-  }, [scoped, filters.startZones, filters.codeQuery])
+  }, [scoped, filters.sets, filters.rotations, filters.startZones, filters.codeQuery])
 
   const visible = useMemo(() => {
     return scoped.filter(
       (attack) =>
-        (skill === "serve" || zoneMatches(attack, filters.startZones)) &&
+        numberMatches(attack.setNumber, filters.sets) &&
+        numberMatches(attack.rotation, filters.rotations) &&
+        zoneMatches(attack, activeZones) &&
         (skill === "serve" || codeMatches(attack, filters.codeQuery)),
     )
-  }, [scoped, skill, filters.startZones, filters.codeQuery])
+  }, [scoped, skill, filters.sets, filters.rotations, activeZones, filters.codeQuery])
 
-  const note = skill === "attack" ? attackNote(filters.startZones, filters.codeQuery) : ""
+  const note = chartNote(skill, filters)
 
   const stats = useMemo(() => {
     const kills = visible.filter((attack) => attack.evaluation === "#").length
@@ -432,51 +484,41 @@ export function AttackApp() {
             </Select>
           </section>
 
+          {setChoices.length > 0 ? (
+            <ChoiceRow
+              label="ست"
+              selected={filters.sets.map(String)}
+              choices={setChoices.map((item) => ({ id: String(item.set), text: fa(item.set), count: item.count }))}
+              dataAttr="data-set"
+              onChange={(next) => setFilters((current) => ({ ...current, sets: next.map(Number) }))}
+            />
+          ) : null}
+
+          {rotationChoices.length > 0 ? (
+            <ChoiceRow
+              label="چرخش"
+              hint="با ست، منطقه و کد جمع می‌شود. چیدمان شش‌زمین جداست."
+              selected={filters.rotations.map(String)}
+              choices={rotationChoices.map((item) => ({
+                id: String(item.rotation),
+                text: fa(item.rotation),
+                count: item.count,
+              }))}
+              dataAttr="data-rotation"
+              onChange={(next) => setFilters((current) => ({ ...current, rotations: next.map(Number) }))}
+            />
+          ) : null}
+
           {skill === "attack" ? (
           <>
-          <section>
-            <p className="text-sm font-medium">منطقه شروع</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              جدا از کد حمله است و با اسم بازیکن جمع می‌شود.
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={filters.startZones.length === 0 ? "default" : "outline"}
-                aria-pressed={filters.startZones.length === 0}
-                onClick={() => setFilters((current) => ({ ...current, startZones: [] }))}
-              >
-                همه
-              </Button>
-              {zoneChoices.map((item) => {
-                const on = filters.startZones.includes(item.zone)
-                return (
-                  <Button
-                    key={item.zone}
-                    type="button"
-                    size="sm"
-                    variant={on ? "default" : "outline"}
-                    aria-pressed={on}
-                    data-zone={item.zone}
-                    onClick={() =>
-                      setFilters((current) => {
-                        const selected = current.startZones
-                        if (selected.length === 0) return { ...current, startZones: [item.zone] }
-                        const next = selected.includes(item.zone)
-                          ? selected.filter((zone) => zone !== item.zone)
-                          : [...selected, item.zone]
-                        return { ...current, startZones: next }
-                      })
-                    }
-                  >
-                    {fa(Number(item.zone))}
-                    <span className="text-[11px] opacity-80">({fa(item.count)})</span>
-                  </Button>
-                )
-              })}
-            </div>
-          </section>
+          <ChoiceRow
+            label="منطقه شروع"
+            hint="جدا از کد حمله است و با اسم بازیکن جمع می‌شود."
+            selected={filters.startZones}
+            choices={zoneChoices.map((item) => ({ id: item.zone, text: fa(Number(item.zone)), count: item.count }))}
+            dataAttr="data-zone"
+            onChange={(next) => setFilters((current) => ({ ...current, startZones: next }))}
+          />
 
           <section>
             <label className="text-sm font-medium" htmlFor="attack-code">
@@ -565,9 +607,19 @@ export function AttackApp() {
           </section>
           </>
           ) : (
-            <p className="text-xs leading-5 text-muted-foreground">
-              نقطهٔ پشت خط، جایی است که سرویس زده شده. رنگ روی محل فرود توپ در زمین حریف است.
-            </p>
+            <>
+              <ChoiceRow
+                label="منطقه شروع"
+                hint="جایی که سرویس زده شده، معمولاً ۱، ۶ یا ۵."
+                selected={filters.serveZones}
+                choices={zoneChoices.map((item) => ({ id: item.zone, text: fa(Number(item.zone)), count: item.count }))}
+                dataAttr="data-serve-zone"
+                onChange={(next) => setFilters((current) => ({ ...current, serveZones: next }))}
+              />
+              <p className="text-xs leading-5 text-muted-foreground">
+                نقطهٔ پشت خط، جایی است که سرویس زده شده. رنگ روی محل فرود توپ در زمین حریف است. خط سبز یعنی ایس.
+              </p>
+            </>
           )}
 
           <section>
@@ -719,10 +771,20 @@ export function AttackApp() {
                   {skill === "serve" ? "شروع و فرود" : "ضربه و فرود"}
                 </span>
               )}
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-2.5 rounded-full bg-[#128a3a]" />
+                {skill === "serve" ? "ایس" : "امتیاز"}
+              </span>
               {filters.mode !== "heatmap" ? (
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-0.5 w-6 bg-neutral-500" />
                   {skill === "serve" ? "مسیر سرویس" : "مسیر ضربه"}
+                </span>
+              ) : null}
+              {filters.mode !== "heatmap" ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-0.5 w-6 bg-[#128a3a]" />
+                  {skill === "serve" ? "سرویس امتیاز" : "ضربهٔ امتیاز"}
                 </span>
               ) : null}
               <span>
@@ -751,6 +813,63 @@ export function AttackApp() {
         </main>
       </div>
     </div>
+  )
+}
+
+function ChoiceRow({
+  label,
+  hint,
+  selected,
+  choices,
+  dataAttr,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  selected: string[]
+  choices: { id: string; text: string; count: number }[]
+  dataAttr: "data-set" | "data-rotation" | "data-zone" | "data-serve-zone"
+  onChange: (next: string[]) => void
+}) {
+  return (
+    <section>
+      <p className="text-sm font-medium">{label}</p>
+      {hint ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{hint}</p> : null}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={selected.length === 0 ? "default" : "outline"}
+          aria-pressed={selected.length === 0}
+          onClick={() => onChange([])}
+        >
+          همه
+        </Button>
+        {choices.map((item) => {
+          const on = selected.includes(item.id)
+          return (
+            <Button
+              key={item.id}
+              type="button"
+              size="sm"
+              variant={on ? "default" : "outline"}
+              aria-pressed={on}
+              {...{ [dataAttr]: item.id }}
+              onClick={() => {
+                if (selected.length === 0) {
+                  onChange([item.id])
+                  return
+                }
+                onChange(on ? selected.filter((id) => id !== item.id) : [...selected, item.id])
+              }}
+            >
+              {item.text}
+              <span className="text-[11px] opacity-80">({fa(item.count)})</span>
+            </Button>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 

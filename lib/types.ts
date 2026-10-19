@@ -43,7 +43,10 @@ export type Filters = {
   phases: Record<Phase, boolean>
   hits: Record<Hit, boolean>
   player: string
+  sets: number[]
+  rotations: number[]
   startZones: string[]
+  serveZones: string[]
   codeQuery: string
   group: GroupMode
   mode: PlotMode

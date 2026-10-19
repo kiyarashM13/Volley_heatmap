@@ -221,12 +221,13 @@ function drawDirections(
     ctx.save()
     ctx.lineCap = "round"
     ctx.lineJoin = "round"
-    ctx.strokeStyle = `rgba(72, 72, 72, ${alpha})`
     ctx.lineWidth = width
-    for (const attack of attacks) {
+    const paintLine = (attack: Attack) => {
       const start = designPoint(ox, oy, scale, attack.sx, attack.sy)
       const end = designPoint(ox, oy, scale, attack.ex, attack.ey)
       const measured = attack.endMeasured !== false
+      const scored = attack.evaluation === "#"
+      ctx.strokeStyle = scored ? `rgba(18, 138, 58, ${Math.min(1, alpha + 0.2)})` : `rgba(72, 72, 72, ${alpha})`
       ctx.setLineDash(measured ? [] : [Math.max(3, scale * 0.06), Math.max(2.5, scale * 0.045)])
       ctx.beginPath()
       ctx.moveTo(start.px, start.py)
@@ -243,16 +244,21 @@ function drawDirections(
       ctx.lineTo(end.px, end.py)
       ctx.stroke()
     }
+    for (const attack of attacks) if (attack.evaluation !== "#") paintLine(attack)
+    for (const attack of attacks) if (attack.evaluation === "#") paintLine(attack)
     ctx.restore()
   }
 
-  for (const attack of attacks) {
+  const plain = attacks.filter((attack) => attack.evaluation !== "#")
+  const scored = attacks.filter((attack) => attack.evaluation === "#")
+  for (const attack of [...plain, ...scored]) {
+    const point = attack.evaluation === "#"
     if (heatStarts && !withLines) {
-      marker(attack.sx, attack.sy, attack.startMeasured !== false, "#e10600")
+      marker(attack.sx, attack.sy, attack.startMeasured !== false, point ? "#128a3a" : "#e10600")
       continue
     }
     if (!withLines) continue
-    const dot = "rgba(28, 28, 28, 0.92)"
+    const dot = point ? "#128a3a" : "rgba(28, 28, 28, 0.92)"
     marker(attack.sx, attack.sy, attack.startMeasured !== false, dot)
     marker(attack.ex, attack.ey, attack.endMeasured !== false, dot)
   }
