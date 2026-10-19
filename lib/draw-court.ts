@@ -308,10 +308,16 @@ export function drawAttacks(
     if (panel.label) {
       ctx.save()
       ctx.fillStyle = ink.label
-      ctx.font = `600 14px ${fontFamily}`
       ctx.textAlign = "center"
       ctx.textBaseline = "middle"
       ctx.direction = /[\u0600-\u06FF]/.test(panel.label) ? "rtl" : "ltr"
+      const labelWidth = 4 * layout.scale - 8
+      let labelSize = 14
+      ctx.font = `600 ${labelSize}px ${fontFamily}`
+      while (labelSize > 9 && ctx.measureText(panel.label).width > labelWidth) {
+        labelSize -= 0.5
+        ctx.font = `600 ${labelSize}px ${fontFamily}`
+      }
       ctx.fillText(panel.label, centerX, panel.oy - 12)
       ctx.restore()
     }

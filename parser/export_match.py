@@ -45,8 +45,8 @@ SKILL_RE = re.compile(r"^[*a](\d+)([SREABDF])")
 HIT_CODES = {"H": "hard", "T": "tip", "P": "soft"}
 # DataVolley serve-type letter, the character immediately after S.
 SERVE_TYPES = {
-    "Q": "Q · پرشی فلوت",
-    "M": "M · پرشی اسپک",
+    "Q": "Q · سرویس پرشی",
+    "M": "M · سرویس موجی",
     "T": "T · فلوت",
     "H": "H · هیبرید",
 }
