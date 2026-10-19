@@ -348,6 +348,14 @@ export function AttackApp() {
               <p className="mt-1 max-w-xl text-sm text-muted-foreground">
                 نقطهٔ فرود و مسیر هر ضربه، و جای سرویس تا فرود آن، از مختصات فایل خوانده می‌شود.
               </p>
+              <a
+                href="https://github.com/kiyarashM13/Volley_heatmap"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-block text-sm text-primary underline-offset-4 hover:underline"
+              >
+                github.com/kiyarashM13/Volley_heatmap
+              </a>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant={skill === "attack" ? "default" : "outline"} onClick={() => setSkill("attack")}>
                   حمله
