@@ -1,0 +1,5 @@
+pydatavolley @ git+https://github.com/openvolley/pydatavolley.git
+pandas>=1.5.0,<2.3
+numpy>=1.23.3
+requests>=2.28
+charset-normalizer>=3.0
