@@ -55,6 +55,10 @@ function fa(value: number, digits = 0) {
   })
 }
 
+function percent(ratio: number) {
+  return `${fa(Math.round(ratio * 100))}٪`
+}
+
 function playerKey(attack: Attack) {
   return `${attack.playerNumber}|${attack.playerName}`
 }
@@ -690,13 +694,13 @@ export function AttackApp() {
             <Stat label={skill === "serve" ? "ایس" : "امتیاز"} value={fa(stats.kills)} />
             <Stat label="خطا" value={fa(stats.errors)} />
             {skill === "serve" ? (
-              <Stat label="موفقیت" value={fa(stats.success, 3)} hint="ایس / سرویس" />
+              <Stat label="موفقیت" value={percent(stats.success)} hint="ایس / سرویس" />
             ) : (
               <Stat label="بلاک" value={fa(stats.blocks)} />
             )}
             <Stat
               label="کارایی"
-              value={fa(stats.efficiency, 3)}
+              value={percent(stats.efficiency)}
               hint={skill === "serve" ? "(ایس − خطا) / سرویس" : "(امتیاز − خطا − بلاک) / حمله"}
               className="col-span-2 sm:col-span-1"
             />
