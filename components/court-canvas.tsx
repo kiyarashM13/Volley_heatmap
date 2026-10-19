@@ -39,11 +39,12 @@ export const CourtCanvas = forwardRef<HTMLCanvasElement, Props>(function CourtCa
         h: layout.h,
         scale: layout.scale,
         columns: layout.columns,
-        panels: layout.panels.map((panel) => ({
+          panels: layout.panels.map((panel) => ({
           label: panel.label,
           ox: panel.ox,
           oy: panel.oy,
           n: panel.attacks.length,
+          summary: panel.summary,
         })),
       })
       const ctx = canvas.getContext("2d")

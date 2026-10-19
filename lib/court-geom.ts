@@ -16,6 +16,7 @@ const ROTATION_ORDER = [1, 6, 5, 4, 3, 2]
 export type Panel = {
   label: string | null
   attacks: Attack[]
+  summary: string
   ox: number
   oy: number
 }
@@ -29,12 +30,21 @@ export type ChartLayout = {
   panels: Panel[]
 }
 
-export function columnCount(width: number, group: GroupMode): number {
+export function columnCount(_width: number, group: GroupMode): number {
   if (group === "court") return 1
-  if (group === "rotation") return width < 700 ? 2 : 3
-  if (width < 540) return 1
-  if (width < 1080) return 2
-  return 4
+  return 3
+}
+
+export function attackSummary(attacks: Attack[]): string {
+  const attempts = attacks.length
+  const kills = attacks.filter((attack) => attack.evaluation === "#").length
+  const errors = attacks.filter((attack) => attack.evaluation === "=").length
+  const blocks = attacks.filter((attack) => attack.evaluation === "/").length
+  const efficiency = attempts === 0 ? 0 : (kills - errors - blocks) / attempts
+  const success = attempts === 0 ? 0 : kills / attempts
+  const count = attempts.toLocaleString("fa-IR")
+  const percent = (ratio: number) => `${Math.round(ratio * 100).toLocaleString("fa-IR")}٪`
+  return `${count} حمله | ${percent(efficiency)} کارایی | ${percent(success)} موفقیت`
 }
 
 export function attackCode(attack: Attack): string {
@@ -70,17 +80,18 @@ export function buildLayout(
 ): ChartLayout {
   const source = panelsFor(attacks, group)
   const panels = source.length > 0 ? source : [{ label: null, attacks: [] }]
-  const scale = group === "court" ? 92 : group === "rotation" ? 50 : 58
+  const scale = group === "court" ? 68 : 42
   const cols = Math.min(Math.max(columns, 1), panels.length)
   const rows = Math.ceil(panels.length / cols)
-  const labelH = group === "court" ? 0 : 28
-  const titleH = 46
-  const gapX = 28
-  const gapY = 22
-  const padX = 24
-  const padB = 18
+  const labelH = group === "court" ? 0 : 22
+  const footerH = 28
+  const titleH = 40
+  const gapX = 18
+  const gapY = 20
+  const padX = 18
+  const padB = 12
   const cellW = 4 * scale
-  const cellH = labelH + 7 * scale
+  const cellH = labelH + 7 * scale + footerH
   const gridW = cols * cellW + (cols - 1) * gapX
   const w = padX * 2 + gridW
   const h = titleH + rows * cellH + (rows - 1) * gapY + padB
@@ -97,6 +108,7 @@ export function buildLayout(
       return {
         label: panel.label,
         attacks: panel.attacks,
+        summary: attackSummary(panel.attacks),
         ox: originX0 + col * (cellW + gapX),
         oy: titleH + row * (cellH + gapY) + labelH,
       }

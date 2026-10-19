@@ -303,16 +303,31 @@ export function drawAttacks(
     drawSurface(ctx, theme, panel.ox, panel.oy, layout.scale, true)
     drawDirections(ctx, panel.attacks, panel.ox, panel.oy, layout.scale, mode !== "heatmap", mode === "heatmap")
     ctx.restore()
+    const centerX = panel.ox + 2 * layout.scale
     if (panel.label) {
       ctx.save()
       ctx.fillStyle = ink.label
-      ctx.font = `600 15px ${fontFamily}`
+      ctx.font = `600 14px ${fontFamily}`
       ctx.textAlign = "center"
       ctx.textBaseline = "middle"
       ctx.direction = /[\u0600-\u06FF]/.test(panel.label) ? "rtl" : "ltr"
-      ctx.fillText(panel.label, panel.ox + 2 * layout.scale, panel.oy - 14)
+      ctx.fillText(panel.label, centerX, panel.oy - 12)
       ctx.restore()
     }
+    ctx.save()
+    ctx.fillStyle = ink.label
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+    ctx.direction = "rtl"
+    const captionWidth = 4 * layout.scale - 8
+    let captionSize = 12
+    ctx.font = `500 ${captionSize}px ${fontFamily}`
+    while (captionSize > 8 && ctx.measureText(panel.summary).width > captionWidth) {
+      captionSize -= 0.5
+      ctx.font = `500 ${captionSize}px ${fontFamily}`
+    }
+    ctx.fillText(panel.summary, centerX, panel.oy + 7 * layout.scale + 14)
+    ctx.restore()
   }
 
   return layout
@@ -320,8 +335,8 @@ export function drawAttacks(
 
 export function chartCssSize(parentWidth: number, layout: ChartLayout, group: GroupMode) {
   const panelDesign = layout.scale * 4
-  const maxPanel = group === "court" ? 400 : layout.columns <= 1 ? 460 : layout.columns === 2 ? 430 : 250
+  const maxPanel = group === "court" ? 280 : 176
   const panelIfFull = panelDesign * (parentWidth / layout.w)
-  const cssWidth = Math.max(240, Math.min(parentWidth, panelIfFull > maxPanel ? (maxPanel / panelDesign) * layout.w : parentWidth))
+  const cssWidth = Math.max(220, Math.min(parentWidth, panelIfFull > maxPanel ? (maxPanel / panelDesign) * layout.w : parentWidth))
   return { cssWidth, cssHeight: cssWidth * (layout.h / layout.w) }
 }

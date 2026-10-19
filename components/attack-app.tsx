@@ -525,6 +525,7 @@ export function AttackApp() {
                   مسیر ضربه
                 </span>
               ) : null}
+              <span>کارایی = (امتیاز − خطا − بلاک) / حمله، موفقیت = امتیاز / حمله</span>
               {filters.mode !== "lines" ? (
                 <span className="inline-flex items-center gap-2">
                   <span
