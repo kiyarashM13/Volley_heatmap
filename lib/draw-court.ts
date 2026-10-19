@@ -264,6 +264,24 @@ function drawDirections(
   }
 }
 
+function fitSize(
+  ctx: CanvasRenderingContext2D,
+  family: string,
+  weight: string,
+  text: string,
+  maxWidth: number,
+  size: number,
+  min: number,
+) {
+  let next = size
+  ctx.font = `${weight} ${next}px ${family}`
+  while (next > min && ctx.measureText(text).width > maxWidth) {
+    next -= 0.5
+    ctx.font = `${weight} ${next}px ${family}`
+  }
+  return next
+}
+
 function paintFrame(ctx: CanvasRenderingContext2D, theme: CourtTheme, w: number, h: number) {
   ctx.clearRect(0, 0, w, h)
   const grad = ctx.createLinearGradient(0, 0, 0, h)
@@ -293,21 +311,19 @@ export function drawAttacks(
 
   ctx.save()
   ctx.fillStyle = ink.title
-  ctx.font = `700 22px ${fontFamily}`
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
   ctx.direction = "ltr"
-  ctx.fillText(layout.title, layout.w / 2, note ? 16 : 24)
+  const titleMax = layout.w - 36
+  const titleStart = note
+    ? Math.min(18, Math.max(13, layout.scale * 0.36))
+    : Math.min(28, Math.max(16, layout.scale * 0.46))
+  fitSize(ctx, fontFamily, "700", layout.title, titleMax, titleStart, 11)
+  ctx.fillText(layout.title, layout.w / 2, note ? 15 : 20)
   if (note) {
     ctx.direction = /[\u0600-\u06FF]/.test(note) ? "rtl" : "ltr"
-    let noteSize = 13
-    ctx.font = `500 ${noteSize}px ${fontFamily}`
-    const noteWidth = layout.w - 24
-    while (noteSize > 9 && ctx.measureText(note).width > noteWidth) {
-      noteSize -= 0.5
-      ctx.font = `500 ${noteSize}px ${fontFamily}`
-    }
-    ctx.fillText(note, layout.w / 2, 36)
+    fitSize(ctx, fontFamily, "500", note, titleMax, 13, 9)
+    ctx.fillText(note, layout.w / 2, 38)
   }
   ctx.restore()
 

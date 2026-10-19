@@ -60,9 +60,13 @@ export const CourtCanvas = forwardRef<HTMLCanvasElement, Props>(function CourtCa
     const observer = new ResizeObserver(paint)
     observer.observe(parent)
     window.addEventListener("resize", paint)
+    const onFonts = () => paint()
+    document.fonts.addEventListener("loadingdone", onFonts)
+    void document.fonts.ready.then(onFonts)
     return () => {
       observer.disconnect()
       window.removeEventListener("resize", paint)
+      document.fonts.removeEventListener("loadingdone", onFonts)
     }
   }, [attacks, mode, group, themeId, title, skill, note])
 
