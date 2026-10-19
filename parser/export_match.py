@@ -150,13 +150,15 @@ def export_match(path: Path, file_name: str | None = None) -> dict:
         start = (_num(row.get("start_coordinate_x")), _num(row.get("start_coordinate_y")))
         end = (_num(row.get("end_coordinate_x")), _num(row.get("end_coordinate_y")))
         mid = (_num(row.get("mid_coordinate_x")), _num(row.get("mid_coordinate_y")))
-        located = "coordinate"
+        start_measured = True
+        end_measured = True
         # A few VolleyStation rows store an end index far outside the 0–7 court.
         if not _on_court(start[0], start[1]):
             start = (None, None)
+            start_measured = False
         if not _on_court(end[0], end[1]):
             end = (None, None)
-            located = "zone"
+            end_measured = False
         if not _on_court(mid[0], mid[1]):
             mid = (None, None)
 
@@ -166,14 +168,15 @@ def export_match(path: Path, file_name: str | None = None) -> dict:
                 unplotted += 1
                 continue
             start = placed
-            located = "zone"
+            start_measured = False
         if end[0] is None or end[1] is None:
             placed = _place(_zone(row.get("end_zone")), sub, upper=True)
             if placed is None:
                 unplotted += 1
                 continue
             end = placed
-            located = "zone"
+            end_measured = False
+        located = "coordinate" if start_measured and end_measured else "zone"
 
         sx, sy = start
         ex, ey = end
@@ -204,6 +207,8 @@ def export_match(path: Path, file_name: str | None = None) -> dict:
                 "startZone": _zone(row.get("start_zone")),
                 "endZone": _zone(row.get("end_zone")),
                 "located": located,
+                "startMeasured": start_measured,
+                "endMeasured": end_measured,
                 "sx": round(sx, 4),
                 "sy": round(sy, 4),
                 "ex": round(ex, 4),

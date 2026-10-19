@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { COURT_THEMES, DEFAULT_COURT, courtById } from "@/lib/courts"
 import { bytesToBlob, canvasToJpeg, downloadBlob, jpegBytesToPdf } from "@/lib/pdf"
-import type { Attack, Filters, Hit, Phase, PlotMode, ScoutMatch } from "@/lib/types"
+import type { Attack, Filters, GroupMode, Hit, Phase, PlotMode, ScoutMatch } from "@/lib/types"
 
 const PHASES: { id: Phase; label: string }[] = [
   { id: "reception", label: "بعد از دریافت" },
@@ -27,16 +27,13 @@ const HITS: { id: Hit; label: string }[] = [
 const PLOTS: { id: PlotMode; label: string }[] = [
   { id: "both", label: "هر دو" },
   { id: "heatmap", label: "نقشه حرارتی" },
-  { id: "lines", label: "خطوط" },
+  { id: "lines", label: "جهت" },
 ]
 
-const EVAL_LEGEND = [
-  { code: "#", label: "امتیاز", color: "#f2c14e" },
-  { code: "+", label: "مثبت", color: "#7dcea0" },
-  { code: "!", label: "معمولی", color: "#85c1e9" },
-  { code: "-", label: "ضعیف", color: "#d5d8dc" },
-  { code: "/", label: "بلاک", color: "#5dade2" },
-  { code: "=", label: "خطا", color: "#e85d4c" },
+const GROUPS: { id: GroupMode; label: string }[] = [
+  { id: "code", label: "ترکیب حمله" },
+  { id: "rotation", label: "چرخش" },
+  { id: "court", label: "یک زمین" },
 ]
 
 function fa(value: number, digits = 0) {
@@ -67,7 +64,7 @@ export function AttackApp() {
     phases: { reception: true, transition: true, other: true },
     hits: { hard: true, tip: true, soft: true, other: true },
     player: "all",
-    byRotation: false,
+    group: "code",
     mode: "both",
   })
   const [themeId, setThemeId] = useState(DEFAULT_COURT)
@@ -105,6 +102,10 @@ export function AttackApp() {
   }, [matches, team])
 
   const player = players.some((item) => item.key === filters.player) ? filters.player : "all"
+  const selectedPlayer = players.find((item) => item.key === player)
+  const chartTitle = selectedPlayer
+    ? `#${selectedPlayer.number} - ${selectedPlayer.name || selectedPlayer.number}`
+    : team || "جهت حمله"
 
   const visible = useMemo(() => {
     return matches.flatMap((match) =>
@@ -209,7 +210,7 @@ export function AttackApp() {
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">جهت حمله</h1>
               <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-                مسیر و تراکم فرود اسپک را از فایل DataVolley ببینید. مدل زمین را عوض کنید؛ مختصات همان فایل می‌ماند.
+                نقطهٔ فرود و مسیر هر ضربه از مختصات فایل خوانده می‌شود. اوج قرمز روی همان نقطه است و خط از محل ضربه تا فرود می‌رود.
               </p>
             </div>
             {scoreLine ? (
@@ -300,12 +301,14 @@ export function AttackApp() {
               }}
             >
               <SelectTrigger id="team" className="w-full">
-                <SelectValue placeholder="بعد از باز کردن فایل" />
+                <SelectValue>
+                  {(value) => (value ? <span dir="ltr">{value}</span> : "بعد از باز کردن فایل")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {teams.map(([name, count]) => (
                   <SelectItem key={name} value={name}>
-                    {name} ({fa(count)})
+                    <span dir="ltr">{name}</span> ({fa(count)})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -322,13 +325,19 @@ export function AttackApp() {
               }}
             >
               <SelectTrigger id="player" className="w-full">
-                <SelectValue placeholder="همه" />
+                <SelectValue>
+                  {(value) => {
+                    const found = players.find((item) => item.key === value)
+                    if (!found) return "همه بازیکن‌ها"
+                    return <span dir="ltr">{playerLabel(found.number, found.name)}</span>
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">همه بازیکن‌ها</SelectItem>
                 {players.map((player) => (
                   <SelectItem key={player.key} value={player.key}>
-                    {playerLabel(player.number, player.name)} ({fa(player.count)})
+                    <span dir="ltr">{playerLabel(player.number, player.name)}</span> ({fa(player.count)})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -384,7 +393,7 @@ export function AttackApp() {
           <section>
             <p className="text-sm font-medium">مدل زمین</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              ظاهر نمودار عوض می‌شود. ساحلی خط ۳ متر ندارد؛ بقیه سالنی‌اند.
+              برگ مربی برای خواندن فرود است. عوض کردن رنگ، جای خط و نقطه را جابه‌جا نمی‌کند.
             </p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {COURT_THEMES.map((item) => {
@@ -425,15 +434,21 @@ export function AttackApp() {
                   {plot.label}
                 </Button>
               ))}
-              <Button
-                type="button"
-                size="sm"
-                variant={filters.byRotation ? "default" : "outline"}
-                aria-pressed={filters.byRotation}
-                onClick={() => setFilters((current) => ({ ...current, byRotation: !current.byRotation }))}
-              >
-                جدا بر اساس چرخش
-              </Button>
+            </div>
+            <p className="mt-3 text-sm font-medium">چیدمان</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {GROUPS.map((item) => (
+                <Button
+                  key={item.id}
+                  type="button"
+                  size="sm"
+                  variant={filters.group === item.id ? "default" : "outline"}
+                  aria-pressed={filters.group === item.id}
+                  onClick={() => setFilters((current) => ({ ...current, group: item.id }))}
+                >
+                  {item.label}
+                </Button>
+              ))}
             </div>
           </section>
 
@@ -472,7 +487,7 @@ export function AttackApp() {
                 <p className="text-xs text-muted-foreground">
                   {theme.name}
                   {team ? ` · ${team}` : ""}
-                  {filters.byRotation ? " · شش چرخش ستر" : ""}
+                  {filters.group === "code" ? " · هر خانه یک ترکیب" : filters.group === "rotation" ? " · شش چرخش" : " · همه روی یک زمین"}
                 </p>
               </div>
               <Badge variant="outline">{fa(visible.length)} ضربه روی نمودار</Badge>
@@ -488,28 +503,41 @@ export function AttackApp() {
               ref={canvasRef}
               attacks={visible}
               mode={filters.mode}
-              byRotation={filters.byRotation}
+              group={filters.group}
               themeId={themeId}
+              title={chartTitle}
             />
             <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              {filters.mode !== "heatmap"
-                ? EVAL_LEGEND.map((item) => (
-                    <span key={item.code} className="inline-flex items-center gap-1.5">
-                      <span className="size-2.5 rounded-full" style={{ background: item.color }} />
-                      {item.label}
-                    </span>
-                  ))
-                : null}
+              {filters.mode === "heatmap" ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="size-2.5 rounded-full bg-[#e10600]" />
+                  محل ضربه
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="size-2.5 rounded-full bg-neutral-800" />
+                  ضربه و فرود
+                </span>
+              )}
+              {filters.mode !== "heatmap" ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-0.5 w-6 bg-neutral-500" />
+                  مسیر ضربه
+                </span>
+              ) : null}
               {filters.mode !== "lines" ? (
                 <span className="inline-flex items-center gap-2">
-                  <span className="h-2 w-16 rounded-full bg-gradient-to-l from-red-700 via-orange-500 to-amber-200" />
-                  تراکم فرود
+                  <span
+                    className="h-2 w-16 rounded-full"
+                    style={{ background: "linear-gradient(90deg, #46d24a, #ffe14a 55%, #d01212)" }}
+                  />
+                  تراکم فرود، سبز کم و قرمز زیاد
                 </span>
               ) : null}
             </div>
             {zoneFallback ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                چند ضربه مختصات قابل‌اعتماد نداشتند و از روی ناحیهٔ زمین رسم شدند.
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                ضربهٔ نقطه‌چین مختصات فرود نداشت و وسط همان منطقه گذاشته شده. داخل نقشهٔ حرارتی نیست تا جای توپ جابه‌جا دیده نشود.
               </p>
             ) : null}
           </section>

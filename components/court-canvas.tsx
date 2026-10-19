@@ -2,18 +2,19 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react"
 
-import { DESIGN, drawAttacks } from "@/lib/draw-court"
-import type { Attack, PlotMode } from "@/lib/types"
+import { buildLayout, chartCssSize, columnCount, drawAttacks } from "@/lib/draw-court"
+import type { Attack, GroupMode, PlotMode } from "@/lib/types"
 
 type Props = {
   attacks: Attack[]
   mode: PlotMode
-  byRotation: boolean
+  group: GroupMode
   themeId: string
+  title: string
 }
 
 export const CourtCanvas = forwardRef<HTMLCanvasElement, Props>(function CourtCanvas(
-  { attacks, mode, byRotation, themeId },
+  { attacks, mode, group, themeId, title },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -25,27 +26,42 @@ export const CourtCanvas = forwardRef<HTMLCanvasElement, Props>(function CourtCa
     if (!canvas || !parent) return
 
     const paint = () => {
-      const design = byRotation ? DESIGN.rotation : DESIGN.single
-      const maxHeight = byRotation ? 840 : Math.min(window.innerHeight * 0.62, 700)
-      const widthFromHeight = maxHeight * (design.w / design.h)
-      const cssWidth = Math.max(280, Math.min(parent.clientWidth, widthFromHeight))
-      const cssHeight = cssWidth * (design.h / design.w)
+      const columns = columnCount(parent.clientWidth, group)
+      const layout = buildLayout(attacks, group, columns, title)
+      const { cssWidth, cssHeight } = chartCssSize(parent.clientWidth, layout, group)
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
       canvas.style.width = `${cssWidth}px`
       canvas.style.height = `${cssHeight}px`
       canvas.width = Math.round(cssWidth * dpr)
       canvas.height = Math.round(cssHeight * dpr)
+      canvas.dataset.layout = JSON.stringify({
+        w: layout.w,
+        h: layout.h,
+        scale: layout.scale,
+        columns: layout.columns,
+        panels: layout.panels.map((panel) => ({
+          label: panel.label,
+          ox: panel.ox,
+          oy: panel.oy,
+          n: panel.attacks.length,
+        })),
+      })
       const ctx = canvas.getContext("2d")
       if (!ctx) return
-      ctx.setTransform((cssWidth / design.w) * dpr, 0, 0, (cssHeight / design.h) * dpr, 0, 0)
-      drawAttacks(ctx, attacks, mode, byRotation, themeId)
+      ctx.setTransform((cssWidth / layout.w) * dpr, 0, 0, (cssHeight / layout.h) * dpr, 0, 0)
+      const family = getComputedStyle(document.body).fontFamily || "sans-serif"
+      drawAttacks(ctx, attacks, mode, group, themeId, title, columns, family)
     }
 
     paint()
     const observer = new ResizeObserver(paint)
     observer.observe(parent)
-    return () => observer.disconnect()
-  }, [attacks, mode, byRotation, themeId])
+    window.addEventListener("resize", paint)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("resize", paint)
+    }
+  }, [attacks, mode, group, themeId, title])
 
   return <canvas ref={canvasRef} className="mx-auto block max-w-full rounded-2xl" />
 })

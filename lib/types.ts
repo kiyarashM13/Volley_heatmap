@@ -1,6 +1,7 @@
 export type Phase = "reception" | "transition" | "other"
 export type Hit = "hard" | "tip" | "soft" | "other"
 export type PlotMode = "heatmap" | "lines" | "both"
+export type GroupMode = "code" | "rotation" | "court"
 
 export type Attack = {
   team: string
@@ -15,6 +16,8 @@ export type Attack = {
   startZone: string | null
   endZone: string | null
   located: "coordinate" | "zone"
+  startMeasured: boolean
+  endMeasured: boolean
   sx: number
   sy: number
   ex: number
@@ -38,6 +41,6 @@ export type Filters = {
   phases: Record<Phase, boolean>
   hits: Record<Hit, boolean>
   player: string
-  byRotation: boolean
+  group: GroupMode
   mode: PlotMode
 }

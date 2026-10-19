@@ -1,31 +1,18 @@
 import { courtById, type CourtTheme } from "@/lib/courts"
-import type { Attack, PlotMode } from "@/lib/types"
+import {
+  HEAT_BW,
+  HEAT_NX,
+  HEAT_NY,
+  buildLayout,
+  designPoint,
+  heatColor,
+  splatDensity,
+  type ChartLayout,
+} from "@/lib/court-geom"
+import type { Attack, GroupMode, PlotMode } from "@/lib/types"
 
-export const DESIGN = { single: { w: 460, h: 760 }, rotation: { w: 1080, h: 780 } }
-
-const ROTATION_ORDER = [1, 6, 5, 4, 3, 2]
-
-const EVAL_COLOR: Record<string, string> = {
-  "#": "#f2c14e",
-  "+": "#7dcea0",
-  "!": "#85c1e9",
-  "-": "#d5d8dc",
-  "/": "#5dade2",
-  "=": "#e85d4c",
-}
-
-type Pt = { x: number; y: number }
-
-function courtTransform(originX: number, originY: number, scale: number) {
-  return {
-    px(x: number) {
-      return originX + x * scale
-    },
-    py(y: number) {
-      return originY + (7 - y) * scale
-    },
-  }
-}
+export { buildLayout, columnCount } from "@/lib/court-geom"
+export type { ChartLayout } from "@/lib/court-geom"
 
 function roundRect(
   ctx: CanvasRenderingContext2D,
@@ -77,23 +64,29 @@ function paintTexture(
   }
 }
 
+function courtInk(theme: CourtTheme) {
+  if (theme.id === "scout") {
+    return { title: "#161616", label: "#8d8d8d", border: "#161616", grid: "#c5c5c5" }
+  }
+  return { title: theme.caption, label: theme.caption, border: theme.line, grid: theme.line }
+}
+
 function drawSurface(
   ctx: CanvasRenderingContext2D,
   theme: CourtTheme,
-  originX: number,
-  originY: number,
+  ox: number,
+  oy: number,
   scale: number,
-  labels: boolean,
-  inkOnly = false,
+  inkOnly: boolean,
 ) {
-  const { px, py } = courtTransform(originX, originY, scale)
+  const px = (x: number) => ox + x * scale
+  const py = (y: number) => oy + (7 - y) * scale
   const x0 = px(0.5)
   const x1 = px(3.5)
   const yTop = py(6.5)
   const yBot = py(0.5)
   const yNet = py(3.5)
-  const yAtkHi = py(4.5)
-  const yAtkLo = py(2.5)
+  const ink = courtInk(theme)
 
   ctx.save()
   if (!inkOnly) {
@@ -101,249 +94,168 @@ function drawSurface(
     ctx.fillRect(px(0), py(7), 4 * scale, 7 * scale)
     ctx.fillStyle = theme.floor
     ctx.fillRect(x0, yTop, x1 - x0, yBot - yTop)
-    if (theme.attackLine) {
+    if (theme.attackLine && theme.front !== theme.floor) {
       ctx.fillStyle = theme.front
-      ctx.fillRect(x0, yAtkHi, x1 - x0, yNet - yAtkHi)
-      ctx.fillRect(x0, yNet, x1 - x0, yAtkLo - yNet)
+      ctx.fillRect(x0, py(4.5), x1 - x0, yNet - py(4.5))
+      ctx.fillRect(x0, yNet, x1 - x0, py(2.5) - yNet)
     }
     paintTexture(ctx, theme, x0, yTop, x1 - x0, yBot - yTop)
-  }
-
-  ctx.strokeStyle = theme.line
-  ctx.lineWidth = Math.max(1.2, scale * 0.02)
-  ctx.strokeRect(x0, yTop, x1 - x0, yBot - yTop)
-
-  ctx.lineWidth = Math.max(0.8, scale * 0.012)
-  ctx.beginPath()
-  if (theme.attackLine) {
-    ctx.moveTo(x0, yAtkHi)
-    ctx.lineTo(x1, yAtkHi)
-    ctx.moveTo(x0, yAtkLo)
-    ctx.lineTo(x1, yAtkLo)
-  }
-  if (theme.zoneGrid) {
-    ctx.moveTo(px(1.5), yTop)
-    ctx.lineTo(px(1.5), yBot)
-    ctx.moveTo(px(2.5), yTop)
-    ctx.lineTo(px(2.5), yBot)
-  }
-  ctx.stroke()
-
-  ctx.strokeStyle = theme.net
-  ctx.lineWidth = Math.max(2.4, scale * 0.04)
-  ctx.beginPath()
-  ctx.moveTo(px(0.12), yNet)
-  ctx.lineTo(px(3.88), yNet)
-  ctx.stroke()
-  ctx.strokeStyle = theme.netTape
-  ctx.lineWidth = Math.max(1, scale * 0.012)
-  ctx.beginPath()
-  ctx.moveTo(px(0.12), yNet)
-  ctx.lineTo(px(3.88), yNet)
-  ctx.stroke()
-
-  if (labels) {
-    ctx.fillStyle = theme.label
-    ctx.font = `${Math.max(10, scale * 0.16)}px Vazirmatn, sans-serif`
-    ctx.textAlign = "center"
-    ctx.textBaseline = "middle"
-    const lower: Record<string, [number, number]> = {
-      "5": [1, 1],
-      "6": [2, 1],
-      "1": [3, 1],
-      "7": [1, 2],
-      "8": [2, 2],
-      "9": [3, 2],
-      "4": [1, 3],
-      "3": [2, 3],
-      "2": [3, 3],
+  } else {
+    ctx.strokeStyle = ink.grid
+    ctx.lineWidth = Math.max(0.8, scale * 0.012)
+    ctx.beginPath()
+    if (theme.attackLine) {
+      ctx.moveTo(x0, py(4.5))
+      ctx.lineTo(x1, py(4.5))
+      ctx.moveTo(x0, py(2.5))
+      ctx.lineTo(x1, py(2.5))
     }
-    for (const [zone, [x, y]] of Object.entries(lower)) {
-      ctx.fillText(zone, px(x), py(y))
-      ctx.fillText(zone, px(4 - x), py(7 - y))
+    if (theme.zoneGrid) {
+      ctx.moveTo(px(1.5), yTop)
+      ctx.lineTo(px(1.5), yBot)
+      ctx.moveTo(px(2.5), yTop)
+      ctx.lineTo(px(2.5), yBot)
+      ctx.moveTo(x0, py(5.5))
+      ctx.lineTo(x1, py(5.5))
+      ctx.moveTo(x0, py(1.5))
+      ctx.lineTo(x1, py(1.5))
     }
-    ctx.fillStyle = theme.caption
-    ctx.font = `${Math.max(11, scale * 0.15)}px Vazirmatn, sans-serif`
-    ctx.fillText("فرود", px(2), py(6.85))
-    ctx.fillText("حمله", px(2), py(0.15))
+    ctx.stroke()
+
+    ctx.strokeStyle = ink.border
+    ctx.lineWidth = Math.max(1.25, scale * 0.02)
+    ctx.strokeRect(x0, yTop, x1 - x0, yBot - yTop)
+
+    ctx.strokeStyle = theme.net
+    ctx.lineWidth = Math.max(3.4, scale * 0.078)
+    ctx.lineCap = "butt"
+    ctx.beginPath()
+    ctx.moveTo(px(0.36), yNet)
+    ctx.lineTo(px(3.64), yNet)
+    ctx.stroke()
+    if (theme.netTape !== theme.net) {
+      ctx.strokeStyle = theme.netTape
+      ctx.lineWidth = Math.max(1, scale * 0.014)
+      ctx.beginPath()
+      ctx.moveTo(px(0.36), yNet)
+      ctx.lineTo(px(3.64), yNet)
+      ctx.stroke()
+    }
   }
   ctx.restore()
-}
-
-function kde(
-  points: Pt[],
-  bw: number,
-): { grid: Float32Array; max: number; nx: number; ny: number } {
-  const nx = 72
-  const ny = 126
-  const grid = new Float32Array(nx * ny)
-  let max = 0
-  for (let j = 0; j < ny; j++) {
-    const y = ((j + 0.5) / ny) * 7
-    for (let i = 0; i < nx; i++) {
-      const x = ((i + 0.5) / nx) * 4
-      let sum = 0
-      for (const p of points) {
-        const dx = (x - p.x) / bw
-        const dy = (y - p.y) / bw
-        const r2 = dx * dx + dy * dy
-        if (r2 < 16) sum += Math.exp(-0.5 * r2)
-      }
-      grid[j * nx + i] = sum
-      if (sum > max) max = sum
-    }
-  }
-  return { grid, max, nx, ny }
 }
 
 function drawHeat(
   ctx: CanvasRenderingContext2D,
   attacks: Attack[],
-  originX: number,
-  originY: number,
+  ox: number,
+  oy: number,
   scale: number,
 ) {
-  const points = attacks.map((a) => ({ x: a.ex, y: a.ey }))
+  const points = attacks.filter((attack) => attack.endMeasured !== false).map((attack) => ({ x: attack.ex, y: attack.ey }))
   if (points.length === 0) return
-  const bw = points.length < 12 ? 0.42 : 0.3
-  const { grid, max, nx, ny } = kde(points, bw)
+  const grid = splatDensity(points, HEAT_BW, HEAT_NX, HEAT_NY)
+  let max = 0
+  for (let i = 0; i < grid.length; i++) if (grid[i] > max) max = grid[i]
   if (max <= 0) return
+
   const off = document.createElement("canvas")
-  off.width = nx
-  off.height = ny
+  off.width = HEAT_NX
+  off.height = HEAT_NY
   const octx = off.getContext("2d")
   if (!octx) return
-  const image = octx.createImageData(nx, ny)
-  for (let j = 0; j < ny; j++) {
-    for (let i = 0; i < nx; i++) {
-      const t = grid[j * nx + i] / max
-      if (t < 0.04) continue
-      const clamped = Math.max(0, Math.min(1, t))
-      const alpha = 0.18 + Math.pow(clamped, 0.7) * 0.72
-      const pixel = ((ny - 1 - j) * nx + i) * 4
-      image.data[pixel] = Math.round(255 - clamped * 40)
-      image.data[pixel + 1] = Math.max(0, Math.round(150 - clamped * 120))
-      image.data[pixel + 2] = Math.max(0, Math.round(40 - clamped * 30))
-      image.data[pixel + 3] = Math.round(alpha * 255)
+  const image = octx.createImageData(HEAT_NX, HEAT_NY)
+  for (let j = 0; j < HEAT_NY; j++) {
+    const row = HEAT_NY - 1 - j
+    for (let i = 0; i < HEAT_NX; i++) {
+      const color = heatColor(grid[j * HEAT_NX + i] / max)
+      if (!color) continue
+      const pixel = (row * HEAT_NX + i) * 4
+      image.data[pixel] = color[0]
+      image.data[pixel + 1] = color[1]
+      image.data[pixel + 2] = color[2]
+      image.data[pixel + 3] = color[3]
     }
   }
   octx.putImageData(image, 0, 0)
-  const { px, py } = courtTransform(originX, originY, scale)
+
+  const top = designPoint(ox, oy, scale, 0, 7)
   ctx.save()
   ctx.beginPath()
-  ctx.rect(px(0.35), py(6.7), px(3.65) - px(0.35), py(0.3) - py(6.7))
+  ctx.rect(ox - 14, oy - 14, 4 * scale + 28, 7 * scale + 28)
   ctx.clip()
   ctx.imageSmoothingEnabled = true
-  ctx.drawImage(off, px(0), py(7), 4 * scale, 7 * scale)
+  ctx.imageSmoothingQuality = "high"
+  ctx.drawImage(off, top.px, top.py, 4 * scale, 7 * scale)
   ctx.restore()
 }
 
-function drawArrow(
-  ctx: CanvasRenderingContext2D,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  color: string,
-  alpha: number,
-  width: number,
-) {
-  const dx = x2 - x1
-  const dy = y2 - y1
-  const len = Math.hypot(dx, dy) || 1
-  const ux = dx / len
-  const uy = dy / len
-  const head = Math.min(11, Math.max(6, len * 0.08))
-  ctx.save()
-  ctx.globalAlpha = alpha
-  ctx.strokeStyle = color
-  ctx.fillStyle = color
-  ctx.lineWidth = width
-  ctx.lineCap = "round"
-  ctx.beginPath()
-  ctx.moveTo(x1, y1)
-  ctx.lineTo(x2 - ux * head * 0.6, y2 - uy * head * 0.6)
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.moveTo(x2, y2)
-  ctx.lineTo(x2 - ux * head - uy * head * 0.45, y2 - uy * head + ux * head * 0.45)
-  ctx.lineTo(x2 - ux * head + uy * head * 0.45, y2 - uy * head - ux * head * 0.45)
-  ctx.closePath()
-  ctx.fill()
-  ctx.restore()
-}
-
-function drawLines(
+function drawDirections(
   ctx: CanvasRenderingContext2D,
   attacks: Attack[],
-  originX: number,
-  originY: number,
+  ox: number,
+  oy: number,
   scale: number,
+  withLines: boolean,
+  heatStarts: boolean,
 ) {
-  const { px, py } = courtTransform(originX, originY, scale)
-  const alpha = Math.min(0.85, Math.max(0.18, 22 / Math.max(attacks.length, 1)))
-  const width = Math.max(1, scale * 0.016)
-  for (const attack of attacks) {
-    const color = EVAL_COLOR[attack.evaluation] ?? "#f4f1ea"
-    if (attack.mx != null && attack.my != null) {
-      drawArrow(ctx, px(attack.sx), py(attack.sy), px(attack.mx), py(attack.my), color, alpha, width)
-      drawArrow(ctx, px(attack.mx), py(attack.my), px(attack.ex), py(attack.ey), color, alpha, width)
+  const alpha = attacks.length > 24 ? 0.42 : attacks.length > 12 ? 0.62 : 0.82
+  const width = Math.max(1.15, scale * 0.02)
+  const radius = Math.max(2.7, scale * 0.058)
+
+  const marker = (x: number, y: number, filled: boolean, color: string) => {
+    const point = designPoint(ox, oy, scale, x, y)
+    ctx.beginPath()
+    ctx.arc(point.px, point.py, radius, 0, Math.PI * 2)
+    if (filled) {
+      ctx.fillStyle = color
+      ctx.fill()
     } else {
-      drawArrow(ctx, px(attack.sx), py(attack.sy), px(attack.ex), py(attack.ey), color, alpha, width)
+      ctx.lineWidth = Math.max(1.25, scale * 0.022)
+      ctx.strokeStyle = color
+      ctx.stroke()
     }
   }
-}
 
-function drawLabels(
-  ctx: CanvasRenderingContext2D,
-  theme: CourtTheme,
-  originX: number,
-  originY: number,
-  scale: number,
-) {
-  const { px, py } = courtTransform(originX, originY, scale)
-  ctx.save()
-  ctx.fillStyle = theme.label
-  ctx.font = `${Math.max(10, scale * 0.16)}px Vazirmatn, sans-serif`
-  ctx.textAlign = "center"
-  ctx.textBaseline = "middle"
-  const lower: Record<string, [number, number]> = {
-    "5": [1, 1],
-    "6": [2, 1],
-    "1": [3, 1],
-    "7": [1, 2],
-    "8": [2, 2],
-    "9": [3, 2],
-    "4": [1, 3],
-    "3": [2, 3],
-    "2": [3, 3],
+  if (withLines) {
+    ctx.save()
+    ctx.lineCap = "round"
+    ctx.lineJoin = "round"
+    ctx.strokeStyle = `rgba(72, 72, 72, ${alpha})`
+    ctx.lineWidth = width
+    for (const attack of attacks) {
+      const start = designPoint(ox, oy, scale, attack.sx, attack.sy)
+      const end = designPoint(ox, oy, scale, attack.ex, attack.ey)
+      const measured = attack.endMeasured !== false
+      ctx.setLineDash(measured ? [] : [Math.max(3, scale * 0.06), Math.max(2.5, scale * 0.045)])
+      ctx.beginPath()
+      ctx.moveTo(start.px, start.py)
+      if (
+        measured &&
+        attack.mx != null &&
+        attack.my != null &&
+        Math.hypot(attack.mx - attack.sx, attack.my - attack.sy) > 0.08 &&
+        Math.hypot(attack.ex - attack.mx, attack.ey - attack.my) > 0.08
+      ) {
+        const mid = designPoint(ox, oy, scale, attack.mx, attack.my)
+        ctx.lineTo(mid.px, mid.py)
+      }
+      ctx.lineTo(end.px, end.py)
+      ctx.stroke()
+    }
+    ctx.restore()
   }
-  for (const [zone, [x, y]] of Object.entries(lower)) {
-    ctx.fillText(zone, px(x), py(y))
-    ctx.fillText(zone, px(4 - x), py(7 - y))
-  }
-  ctx.fillStyle = theme.caption
-  ctx.font = `${Math.max(11, scale * 0.15)}px Vazirmatn, sans-serif`
-  ctx.fillText("فرود", px(2), py(6.85))
-  ctx.fillText("حمله", px(2), py(0.15))
-  ctx.restore()
-}
 
-function drawPanel(
-  ctx: CanvasRenderingContext2D,
-  theme: CourtTheme,
-  attacks: Attack[],
-  originX: number,
-  originY: number,
-  scale: number,
-  mode: PlotMode,
-  labels: boolean,
-) {
-  drawSurface(ctx, theme, originX, originY, scale, false)
-  if (mode !== "lines") drawHeat(ctx, attacks, originX, originY, scale)
-  drawSurface(ctx, theme, originX, originY, scale, false, true)
-  if (labels) drawLabels(ctx, theme, originX, originY, scale)
-  if (mode !== "heatmap") drawLines(ctx, attacks, originX, originY, scale)
+  for (const attack of attacks) {
+    if (heatStarts && !withLines) {
+      marker(attack.sx, attack.sy, attack.startMeasured !== false, "#e10600")
+      continue
+    }
+    if (!withLines) continue
+    const dot = "rgba(28, 28, 28, 0.92)"
+    marker(attack.sx, attack.sy, attack.startMeasured !== false, dot)
+    marker(attack.ex, attack.ey, attack.endMeasured !== false, dot)
+  }
 }
 
 function paintFrame(ctx: CanvasRenderingContext2D, theme: CourtTheme, w: number, h: number) {
@@ -360,46 +272,56 @@ export function drawAttacks(
   ctx: CanvasRenderingContext2D,
   attacks: Attack[],
   mode: PlotMode,
-  byRotation: boolean,
+  group: GroupMode,
   themeId: string,
+  title: string,
+  columns: number,
+  fontFamily: string,
 ) {
   const theme = courtById(themeId)
-  const design = byRotation ? DESIGN.rotation : DESIGN.single
-  paintFrame(ctx, theme, design.w, design.h)
-  ctx.fillStyle = theme.caption
+  const layout = buildLayout(attacks, group, columns, title)
+  const ink = courtInk(theme)
+  paintFrame(ctx, theme, layout.w, layout.h)
+
+  ctx.save()
+  ctx.fillStyle = ink.title
+  ctx.font = `700 22px ${fontFamily}`
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
+  ctx.direction = "ltr"
+  ctx.fillText(layout.title, layout.w / 2, 24)
+  ctx.restore()
 
-  if (!byRotation) {
-    const scale = 86
-    const originX = (design.w - 4 * scale) / 2
-    const originY = 28
-    drawPanel(ctx, theme, attacks, originX, originY, scale, mode, true)
-    return
+  for (const panel of layout.panels) {
+    const bleed = 10
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(panel.ox - bleed, panel.oy - bleed, 4 * layout.scale + bleed * 2, 7 * layout.scale + bleed * 2)
+    ctx.clip()
+    drawSurface(ctx, theme, panel.ox, panel.oy, layout.scale, false)
+    if (mode !== "lines") drawHeat(ctx, panel.attacks, panel.ox, panel.oy, layout.scale)
+    drawSurface(ctx, theme, panel.ox, panel.oy, layout.scale, true)
+    drawDirections(ctx, panel.attacks, panel.ox, panel.oy, layout.scale, mode !== "heatmap", mode === "heatmap")
+    ctx.restore()
+    if (panel.label) {
+      ctx.save()
+      ctx.fillStyle = ink.label
+      ctx.font = `600 15px ${fontFamily}`
+      ctx.textAlign = "center"
+      ctx.textBaseline = "middle"
+      ctx.direction = /[\u0600-\u06FF]/.test(panel.label) ? "rtl" : "ltr"
+      ctx.fillText(panel.label, panel.ox + 2 * layout.scale, panel.oy - 14)
+      ctx.restore()
+    }
   }
 
-  const scale = 46
-  const cellW = 4 * scale
-  const cellH = 7 * scale
-  const gapX = 28
-  const gapY = 36
-  const gridW = cellW * 3 + gapX * 2
-  const originX0 = (design.w - gridW) / 2
-  const originY0 = 18
-  ROTATION_ORDER.forEach((rotation, index) => {
-    const col = index % 3
-    const row = Math.floor(index / 3)
-    const ox = originX0 + col * (cellW + gapX)
-    const oy = originY0 + row * (cellH + gapY) + 22
-    const subset = attacks.filter((attack) => attack.rotation === rotation)
-    ctx.fillStyle = theme.id === "beach" ? "#243044" : "#f6f3ec"
-    ctx.font = "15px Vazirmatn, sans-serif"
-    ctx.textAlign = "center"
-    ctx.fillText(
-      `چرخش ${rotation.toLocaleString("fa-IR")} · ${subset.length.toLocaleString("fa-IR")} حمله`,
-      ox + cellW / 2,
-      oy - 14,
-    )
-    drawPanel(ctx, theme, subset, ox, oy, scale, mode, false)
-  })
+  return layout
+}
+
+export function chartCssSize(parentWidth: number, layout: ChartLayout, group: GroupMode) {
+  const panelDesign = layout.scale * 4
+  const maxPanel = group === "court" ? 400 : layout.columns <= 1 ? 460 : layout.columns === 2 ? 430 : 250
+  const panelIfFull = panelDesign * (parentWidth / layout.w)
+  const cssWidth = Math.max(240, Math.min(parentWidth, panelIfFull > maxPanel ? (maxPanel / panelDesign) * layout.w : parentWidth))
+  return { cssWidth, cssHeight: cssWidth * (layout.h / layout.w) }
 }

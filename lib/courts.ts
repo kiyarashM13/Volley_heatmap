@@ -19,6 +19,24 @@ export type CourtTheme = {
 
 export const COURT_THEMES: CourtTheme[] = [
   {
+    id: "scout",
+    name: "برگ مربی",
+    blurb: "شبکه سفید و تور مشکی؛ فرود دقیق خوانده می‌شود",
+    surround: "#ffffff",
+    floor: "#ffffff",
+    front: "#ffffff",
+    line: "#c5c5c5",
+    net: "#111111",
+    netTape: "#111111",
+    label: "#8d8d8d",
+    caption: "#161616",
+    attackLine: true,
+    zoneGrid: true,
+    texture: "flat",
+    frame: ["#ffffff", "#f6f6f6"],
+    swatch: ["#ffffff", "#111111"],
+  },
+  {
     id: "blue",
     name: "سالن آبی",
     blurb: "ترافیلکس آبی با خط ۳ متر",
