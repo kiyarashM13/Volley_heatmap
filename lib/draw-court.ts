@@ -278,9 +278,10 @@ export function drawAttacks(
   columns: number,
   fontFamily: string,
   skill: Skill = "attack",
+  note = "",
 ) {
   const theme = courtById(themeId)
-  const layout = buildLayout(attacks, group, columns, title, skill)
+  const layout = buildLayout(attacks, group, columns, title, skill, note)
   const ink = courtInk(theme)
   paintFrame(ctx, theme, layout.w, layout.h)
 
@@ -290,7 +291,18 @@ export function drawAttacks(
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
   ctx.direction = "ltr"
-  ctx.fillText(layout.title, layout.w / 2, 24)
+  ctx.fillText(layout.title, layout.w / 2, note ? 16 : 24)
+  if (note) {
+    ctx.direction = /[\u0600-\u06FF]/.test(note) ? "rtl" : "ltr"
+    let noteSize = 13
+    ctx.font = `500 ${noteSize}px ${fontFamily}`
+    const noteWidth = layout.w - 24
+    while (noteSize > 9 && ctx.measureText(note).width > noteWidth) {
+      noteSize -= 0.5
+      ctx.font = `500 ${noteSize}px ${fontFamily}`
+    }
+    ctx.fillText(note, layout.w / 2, 36)
+  }
   ctx.restore()
 
   for (const panel of layout.panels) {

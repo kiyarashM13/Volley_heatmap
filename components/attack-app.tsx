@@ -6,6 +6,7 @@ import { useMemo, useRef, useState } from "react"
 import { CourtCanvas } from "@/components/court-canvas"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { COURT_THEMES, DEFAULT_COURT, courtById } from "@/lib/courts"
 import { bytesToBlob, canvasToJpeg, downloadBlob, jpegBytesToPdf } from "@/lib/pdf"
@@ -23,6 +24,8 @@ const HITS: { id: Hit; label: string }[] = [
   { id: "soft", label: "نرم" },
   { id: "other", label: "سایر" },
 ]
+
+const ZONE_ORDER = ["4", "3", "2", "1", "6", "5", "7", "8", "9"]
 
 const PLOTS: { id: PlotMode; label: string; hint: string }[] = [
   { id: "heatmap", label: "هیت مپ", hint: "فقط محل فرود، بدون خط جهت." },
@@ -63,6 +66,27 @@ function eventsOf(match: ScoutMatch, skill: Skill) {
   return skill === "serve" ? match.serves : match.attacks
 }
 
+function zoneMatches(attack: Attack, zones: string[]) {
+  if (zones.length === 0) return true
+  return zones.includes(attack.startZone ?? "")
+}
+
+function codeMatches(attack: Attack, query: string) {
+  const needle = query.trim().toUpperCase()
+  if (!needle) return true
+  return (attack.attackCode?.trim() || "NA").toUpperCase().includes(needle)
+}
+
+function attackNote(zones: string[], query: string) {
+  const parts: string[] = []
+  if (zones.length > 0) {
+    parts.push(`منطقه ${zones.map((zone) => Number(zone).toLocaleString("fa-IR")).join("، ")}`)
+  }
+  const code = query.trim().toUpperCase()
+  if (code) parts.push(code)
+  return parts.join(" · ")
+}
+
 export function AttackApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -75,6 +99,8 @@ export function AttackApp() {
     phases: { reception: true, transition: true, other: true },
     hits: { hard: true, tip: true, soft: true, other: true },
     player: "all",
+    startZones: [],
+    codeQuery: "",
     group: "code",
     mode: "both",
   })
@@ -104,6 +130,8 @@ export function AttackApp() {
     for (const match of matches) {
       for (const attack of eventsOf(match, skill)) {
         if (attack.team !== team) continue
+        if (skill === "attack" && !zoneMatches(attack, filters.startZones)) continue
+        if (skill === "attack" && !codeMatches(attack, filters.codeQuery)) continue
         const key = playerKey(attack)
         const existing = map.get(key)
         if (existing) existing.count += 1
@@ -111,7 +139,7 @@ export function AttackApp() {
       }
     }
     return [...map.values()].sort((a, b) => Number(a.number) - Number(b.number) || a.name.localeCompare(b.name))
-  }, [matches, team, skill])
+  }, [matches, team, skill, filters.startZones, filters.codeQuery])
 
   const player = players.some((item) => item.key === filters.player) ? filters.player : "all"
   const selectedPlayer = players.find((item) => item.key === player)
@@ -119,7 +147,7 @@ export function AttackApp() {
     ? `#${selectedPlayer.number} - ${selectedPlayer.name || selectedPlayer.number}`
     : team || (skill === "serve" ? "سرویس" : "جهت حمله")
 
-  const visible = useMemo(() => {
+  const scoped = useMemo(() => {
     return matches.flatMap((match) =>
       eventsOf(match, skill).filter(
         (attack) =>
@@ -129,7 +157,43 @@ export function AttackApp() {
           (player === "all" || playerKey(attack) === player),
       ),
     )
-  }, [matches, team, filters, player, skill])
+  }, [matches, team, filters.phases, filters.hits, player, skill])
+
+  const zoneChoices = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const attack of scoped) {
+      if (!attack.startZone) continue
+      counts.set(attack.startZone, (counts.get(attack.startZone) ?? 0) + 1)
+    }
+    return ZONE_ORDER.filter((zone) => counts.has(zone) || filters.startZones.includes(zone)).map((zone) => ({
+      zone,
+      count: counts.get(zone) ?? 0,
+    }))
+  }, [scoped, filters.startZones])
+
+  const codeChoices = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const attack of scoped) {
+      if (!zoneMatches(attack, filters.startZones)) continue
+      const code = attack.attackCode?.trim() || "NA"
+      counts.set(code, (counts.get(code) ?? 0) + 1)
+    }
+    const query = filters.codeQuery.trim().toUpperCase()
+    return [...counts.entries()]
+      .filter(([code]) => !query || code.toUpperCase().includes(query))
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "en", { numeric: true }))
+      .map(([code, count]) => ({ code, count }))
+  }, [scoped, filters.startZones, filters.codeQuery])
+
+  const visible = useMemo(() => {
+    return scoped.filter(
+      (attack) =>
+        (skill === "serve" || zoneMatches(attack, filters.startZones)) &&
+        (skill === "serve" || codeMatches(attack, filters.codeQuery)),
+    )
+  }, [scoped, skill, filters.startZones, filters.codeQuery])
+
+  const note = skill === "attack" ? attackNote(filters.startZones, filters.codeQuery) : ""
 
   const stats = useMemo(() => {
     const kills = visible.filter((attack) => attack.evaluation === "#").length
@@ -371,6 +435,90 @@ export function AttackApp() {
           {skill === "attack" ? (
           <>
           <section>
+            <p className="text-sm font-medium">منطقه شروع</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              جدا از کد حمله است و با اسم بازیکن جمع می‌شود.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={filters.startZones.length === 0 ? "default" : "outline"}
+                aria-pressed={filters.startZones.length === 0}
+                onClick={() => setFilters((current) => ({ ...current, startZones: [] }))}
+              >
+                همه
+              </Button>
+              {zoneChoices.map((item) => {
+                const on = filters.startZones.includes(item.zone)
+                return (
+                  <Button
+                    key={item.zone}
+                    type="button"
+                    size="sm"
+                    variant={on ? "default" : "outline"}
+                    aria-pressed={on}
+                    data-zone={item.zone}
+                    onClick={() =>
+                      setFilters((current) => {
+                        const selected = current.startZones
+                        if (selected.length === 0) return { ...current, startZones: [item.zone] }
+                        const next = selected.includes(item.zone)
+                          ? selected.filter((zone) => zone !== item.zone)
+                          : [...selected, item.zone]
+                        return { ...current, startZones: next }
+                      })
+                    }
+                  >
+                    {fa(Number(item.zone))}
+                    <span className="text-[11px] opacity-80">({fa(item.count)})</span>
+                  </Button>
+                )
+              })}
+            </div>
+          </section>
+
+          <section>
+            <label className="text-sm font-medium" htmlFor="attack-code">
+              کد حمله
+            </label>
+            <Input
+              id="attack-code"
+              dir="ltr"
+              className="mt-2 font-medium"
+              value={filters.codeQuery}
+              placeholder="X5"
+              onChange={(event) =>
+                setFilters((current) => ({ ...current, codeQuery: event.target.value.toUpperCase() }))
+              }
+            />
+            <div className="mt-2 flex flex-wrap gap-2">
+              {codeChoices.map((item) => {
+                const on = filters.codeQuery.trim().toUpperCase() === item.code
+                return (
+                  <Button
+                    key={item.code}
+                    type="button"
+                    size="sm"
+                    variant={on ? "default" : "outline"}
+                    aria-pressed={on}
+                    data-code={item.code}
+                    onClick={() =>
+                      setFilters((current) => ({
+                        ...current,
+                        codeQuery: current.codeQuery.trim().toUpperCase() === item.code ? "" : item.code,
+                      }))
+                    }
+                  >
+                    <span dir="ltr">{item.code}</span>
+                    <span className="text-[11px] opacity-80">({fa(item.count)})</span>
+                  </Button>
+                )
+              })}
+            </div>
+          </section>
+
+          <section>
             <p className="text-sm font-medium">فاز حمله</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {PHASES.map((phase) => (
@@ -516,6 +664,7 @@ export function AttackApp() {
                     : filters.group === "rotation"
                       ? " · شش چرخش"
                       : " · همه روی یک زمین"}
+                  {note ? ` · ${note}` : ""}
                 </p>
               </div>
               <Badge variant="outline">{fa(visible.length)} {skill === "serve" ? "سرویس روی نمودار" : "ضربه روی نمودار"}</Badge>
@@ -556,6 +705,7 @@ export function AttackApp() {
               themeId={themeId}
               title={chartTitle}
               skill={skill}
+              note={note}
             />
             <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               {filters.mode === "heatmap" ? (

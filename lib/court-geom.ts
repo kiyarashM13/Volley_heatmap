@@ -80,6 +80,7 @@ export function buildLayout(
   columns: number,
   title: string,
   skill: Skill = "attack",
+  note = "",
 ): ChartLayout {
   const source = panelsFor(attacks, group)
   const panels = source.length > 0 ? source : [{ label: null, attacks: [] }]
@@ -88,7 +89,7 @@ export function buildLayout(
   const rows = Math.ceil(panels.length / cols)
   const labelH = group === "court" ? 0 : 22
   const footerH = 28
-  const titleH = 40
+  const titleH = note ? 56 : 40
   const gapX = 18
   const gapY = 20
   const padX = 18
