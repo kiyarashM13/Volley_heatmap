@@ -24,10 +24,10 @@ const HITS: { id: Hit; label: string }[] = [
   { id: "other", label: "سایر" },
 ]
 
-const PLOTS: { id: PlotMode; label: string }[] = [
-  { id: "both", label: "هر دو" },
-  { id: "heatmap", label: "نقشه حرارتی" },
-  { id: "lines", label: "جهت" },
+const PLOTS: { id: PlotMode; label: string; hint: string }[] = [
+  { id: "heatmap", label: "هیت مپ", hint: "فقط محل فرود، بدون خط جهت." },
+  { id: "lines", label: "جهت", hint: "فقط مسیر، از نقطهٔ شروع تا فرود." },
+  { id: "both", label: "هیت مپ + جهت", hint: "محل فرود و مسیر با هم." },
 ]
 
 const GROUPS: Record<Skill, { id: GroupMode; label: string }[]> = {
@@ -453,21 +453,7 @@ export function AttackApp() {
           </section>
 
           <section>
-            <p className="text-sm font-medium">نمودار</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {PLOTS.map((plot) => (
-                <Button
-                  key={plot.id}
-                  type="button"
-                  size="sm"
-                  variant={filters.mode === plot.id ? "default" : "outline"}
-                  onClick={() => setFilters((current) => ({ ...current, mode: plot.id }))}
-                >
-                  {plot.label}
-                </Button>
-              ))}
-            </div>
-            <p className="mt-3 text-sm font-medium">چیدمان</p>
+            <p className="text-sm font-medium">چیدمان</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {GROUPS[skill].map((item) => (
                 <Button
@@ -533,6 +519,23 @@ export function AttackApp() {
                 </p>
               </div>
               <Badge variant="outline">{fa(visible.length)} {skill === "serve" ? "سرویس روی نمودار" : "ضربه روی نمودار"}</Badge>
+            </div>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              {PLOTS.map((plot) => (
+                <Button
+                  key={plot.id}
+                  type="button"
+                  size="sm"
+                  variant={filters.mode === plot.id ? "default" : "outline"}
+                  aria-pressed={filters.mode === plot.id}
+                  onClick={() => setFilters((current) => ({ ...current, mode: plot.id }))}
+                >
+                  {plot.label}
+                </Button>
+              ))}
+              <span className="text-xs text-muted-foreground">
+                {PLOTS.find((plot) => plot.id === filters.mode)?.hint}
+              </span>
             </div>
             {matches.length === 0 ? (
               <p className="mb-3 text-sm text-muted-foreground">
